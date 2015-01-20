@@ -75,15 +75,6 @@ config SW_SYNC_USER
 	  *WARNING* improper use of this can result in deadlocking kernel
 	  drivers from userspace.
 
-config ANDROID_INTF_ALARM_DEV
-	tristate "Android alarm driver"
-	depends on RTC_CLASS
-	default n
-	---help---
-	  Provides non-wakeup and rtc backed wakeup alarms based on rtc or
-	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
-	  Also exports the alarm interface to user-space.
-	  
 config ANDROID_VSOC
 	tristate "Android Virtual SoC support"
 	default n
