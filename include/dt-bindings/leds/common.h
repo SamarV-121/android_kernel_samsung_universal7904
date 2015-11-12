@@ -7,7 +7,7 @@
  * Copyright (C) 2019 Jacek Anaszewski <jacek.anaszewski@gmail.com>
  */
 
-#ifndef __DT_BINDINGS_LEDS_H__
+#ifndef __DT_BINDINGS_LEDS_H
 #define __DT_BINDINGS_LEDS_H
 
 /* External trigger type */
