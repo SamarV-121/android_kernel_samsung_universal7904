@@ -71,7 +71,7 @@ static void gt683r_brightness_set(struct led_classdev *led_cdev,
 {
 	int i;
 	struct device *dev = led_cdev->dev->parent;
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct gt683r_led *led = hid_get_drvdata(hdev);
 
 	for (i = 0; i < GT683R_LED_COUNT; i++) {
@@ -90,8 +90,7 @@ static ssize_t mode_show(struct device *dev,
 				char *buf)
 {
 	u8 sysfs_mode;
-	struct hid_device *hdev = container_of(dev->parent,
-					struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev->parent);
 	struct gt683r_led *led = hid_get_drvdata(hdev);
 
 	if (led->mode == GT683R_LED_NORMAL)
@@ -109,8 +108,7 @@ static ssize_t mode_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	u8 sysfs_mode;
-	struct hid_device *hdev = container_of(dev->parent,
-					struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev->parent);
 	struct gt683r_led *led = hid_get_drvdata(hdev);
 
 

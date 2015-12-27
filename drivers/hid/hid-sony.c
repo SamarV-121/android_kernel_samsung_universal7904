@@ -596,7 +596,7 @@ static ssize_t ds4_show_poll_interval(struct device *dev,
 				struct device_attribute
 				*attr, char *buf)
 {
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct sony_sc *sc = hid_get_drvdata(hdev);
 
 	return snprintf(buf, PAGE_SIZE, "%i\n", sc->ds4_bt_poll_interval);
@@ -606,7 +606,7 @@ static ssize_t ds4_store_poll_interval(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct sony_sc *sc = hid_get_drvdata(hdev);
 	unsigned long flags;
 	u8 interval;
@@ -1722,7 +1722,7 @@ static void sony_led_set_brightness(struct led_classdev *led,
 				    enum led_brightness value)
 {
 	struct device *dev = led->dev->parent;
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct sony_sc *drv_data;
 
 	int n;
@@ -1764,7 +1764,7 @@ static void sony_led_set_brightness(struct led_classdev *led,
 static enum led_brightness sony_led_get_brightness(struct led_classdev *led)
 {
 	struct device *dev = led->dev->parent;
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct sony_sc *drv_data;
 
 	int n;
@@ -1787,7 +1787,7 @@ static int sony_led_blink_set(struct led_classdev *led, unsigned long *delay_on,
 				unsigned long *delay_off)
 {
 	struct device *dev = led->dev->parent;
-	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
+	struct hid_device *hdev = to_hid_device(dev);
 	struct sony_sc *drv_data = hid_get_drvdata(hdev);
 	int n;
 	u8 new_on, new_off;
