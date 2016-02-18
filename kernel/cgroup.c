@@ -6088,10 +6088,11 @@ struct cgroup_namespace *copy_cgroup_ns(unsigned long flags,
 	mutex_unlock(&cgroup_mutex);
 
 	new_ns = alloc_cgroup_ns();
-    if (IS_ERR(new_ns)) {
-        err = PTR_ERR(new_ns);
+	if (IS_ERR(new_ns)) {
+		err = PTR_ERR(new_ns);
 		goto err_out;
-    }
+	}
+
 	new_ns->user_ns = get_user_ns(user_ns);
 	new_ns->root_cset = cset;
 
