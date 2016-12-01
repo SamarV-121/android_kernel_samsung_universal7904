@@ -16,7 +16,6 @@
 
 #include <asm/cpufeature.h>
 #include <asm/insn.h>
-#include <asm/opcodes.h>
 #include <asm/sysreg.h>
 #include <asm/system_misc.h>
 #include <asm/traps.h>
@@ -366,6 +365,9 @@ static int emulate_swpX(unsigned int address, unsigned int *data,
 	return res;
 }
 
+#define ARM_OPCODE_CONDTEST_FAIL   0
+#define ARM_OPCODE_CONDTEST_PASS   1
+#define ARM_OPCODE_CONDTEST_UNCOND 2
 /*
  * swp_handler logs the id of calling process, dissects the instruction, sanity
  * checks the memory location, calls emulate_swpX for the actual operation and
