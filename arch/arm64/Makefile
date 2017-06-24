@@ -77,6 +77,7 @@ KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
 
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
 KBUILD_CPPFLAGS	+= -mbig-endian
+CHECKFLAGS	+= -D__AARCH64EB__
 AS		+= -EB
 # Prefer the baremetal ELF build target, but not all toolchains include
 # it so fall back to the standard linux version if needed.
@@ -84,6 +85,7 @@ LDFLAGS		+= -EB $(call ld-option, -maarch64elfb, -maarch64linuxb)
 UTS_MACHINE	:= aarch64_be
 else
 KBUILD_CPPFLAGS	+= -mlittle-endian
+CHECKFLAGS	+= -D__AARCH64EL__
 AS		+= -EL
 # Same as above, prefer ELF but fall back to linux target if needed.
 LDFLAGS		+= -EL $(call ld-option, -maarch64elf, -maarch64linux)
