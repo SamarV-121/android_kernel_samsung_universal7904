@@ -47,6 +47,7 @@
 #ifdef CONFIG_SAMSUNG_TUI
 #include "stui_inf.h"
 #endif
+#include <linux/devfreq_boost.h>
 
 /*#define BRINGUP_DECON_BIST*/
 #define DECON_DEBUG_SFR 0x14860400
@@ -1821,8 +1822,10 @@ static int decon_set_win_config(struct decon_device *decon,
 		decon->state == DECON_STATE_TUI ||
 		(decon->ignore_vsync)) {
 		win_data->fence = decon_create_fence(decon, &fence, NULL);
-		if (win_data->fence >= 0)
+		if (win_data->fence >= 0) {
+			devfreq_boost_kick(DEVFREQ_EXYNOS_MIF);
 			decon_install_fence(fence, win_data->fence);
+		}
 		decon_signal_fence(decon);
 		goto err;
 	}
