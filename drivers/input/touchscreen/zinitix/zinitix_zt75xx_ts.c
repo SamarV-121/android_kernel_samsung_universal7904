@@ -1314,9 +1314,9 @@ static bool ts_read_coord(struct bt532_ts_info *info)
 			input_sync(info->input_dev);
 		} else if (zinitix_bit_test(lpm_mode_reg.data, BIT_EVENT_AOD)) {
 			if (info->aot_enable) {
-				input_report_key(info->input_dev, KEY_HOMEPAGE, 1);
+				input_report_key(info->input_dev, KEY_WAKEUP, 1);
 				input_sync(info->input_dev);
-				input_report_key(info->input_dev, KEY_HOMEPAGE, 0);
+				input_report_key(info->input_dev, KEY_WAKEUP, 0);
 				input_sync(info->input_dev);
 				/* request from sensor team */
 				input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM2, 1);
@@ -10236,7 +10236,7 @@ static int bt532_ts_probe(struct i2c_client *client,
 
 	if(pdata->support_lpm_mode){
 		set_bit(KEY_BLACK_UI_GESTURE, info->input_dev->keybit);
-		set_bit(KEY_HOMEPAGE, info->input_dev->keybit);
+		set_bit(KEY_WAKEUP, info->input_dev->keybit);
 	}
 
 	input_set_abs_params(info->input_dev, ABS_MT_POSITION_X,
