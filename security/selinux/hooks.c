@@ -923,7 +923,8 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 		// [ SEC_SELINUX_PORTING_COMMON
 		!strcmp(sb->s_type->name, "configfs") ||
 		// ] SEC_SELINUX_PORTING_COMMON
-	    !strcmp(sb->s_type->name, "pstore"))
+	    !strcmp(sb->s_type->name, "pstore") ||
+	    !strcmp(sb->s_type->name, "bpf"))
 		sbsec->flags |= SE_SBGENFS;
 
 	if (!sbsec->behavior) {
