@@ -627,6 +627,9 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
+ifeq ($(cc-name),gcc)
+KBUILD_CFLAGS	+= --param=max-inline-insns-auto=1000
+endif
 ifeq ($(cc-name),clang)
 ifeq ($(CONFIG_SOC_EXYNOS7885), y)
 KBUILD_CFLAGS	+= -mcpu=cortex-a53
