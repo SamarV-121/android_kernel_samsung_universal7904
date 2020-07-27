@@ -5056,7 +5056,7 @@ CONFIG_TZ_ICCC=y
 # CONFIG_SECURITY_DEFEX is not set
 # CONFIG_DEFEX_KERNEL_ONLY is not set
 # CONFIG_SECURITY_DSMS is not set
-CONFIG_GAF_V3=y
+# CONFIG_GAF_V3 is  not set
 # CONFIG_GAF_V4 is not set
 # CONFIG_GAF_V5 is not set
 # CONFIG_GAF_V6 is not set
