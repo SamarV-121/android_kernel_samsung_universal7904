@@ -137,7 +137,12 @@ static bool disable_error_handling;
 module_param(disable_error_handling, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_error_handling, "Disable error handling");
 
-int disable_recovery_handling = 1; /* MEMDUMP_FILE_FOR_RECOVERY : for /sys/wifi/memdump */
+#if defined(SCSC_SEP_VERSION) && (SCSC_SEP_VERSION >= 100000)
+int disable_recovery_handling = 2; /* MEMDUMP_FILE_FOR_RECOVERY : for /sys/wifi/memdump */
+#else
+/* AOSP */
+int disable_recovery_handling = 1; /* Recovery disabled, enable in init.rc, not here. */
+#endif
 module_param(disable_recovery_handling, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_recovery_handling, "Disable recovery handling");
 static bool disable_recovery_from_memdump_file = true;
@@ -1075,7 +1080,7 @@ static bool is_bug_on_enabled(struct scsc_mx *mx)
 		return bug_on_enabled;
 
 	/* for legacy platforms (including Andorid P) using .memdump.info */
-#if defined(ANDROID_VERSION) && (ANDROID_VERSION >= 90000)
+#if defined(SCSC_SEP_VERSION) && (SCSC_SEP_VERSION >= 90000)
 	#define MX140_MEMDUMP_INFO_FILE	"/data/vendor/conn/.memdump.info"
 #else
 	#define MX140_MEMDUMP_INFO_FILE	"/data/misc/conn/.memdump.info"
@@ -1857,14 +1862,14 @@ void mxman_init(struct mxman *mxman, struct scsc_mx *mx)
 	mxproc_create_info_proc_dir(&mxman->mxproc, mxman);
 	active_mxman = mxman;
 
-#if defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000
 	mxman_create_sysfs_memdump();
 #endif
 }
 
 void mxman_deinit(struct mxman *mxman)
 {
-#if defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000
 	mxman_destroy_sysfs_memdump();
 #endif
 	active_mxman = NULL;

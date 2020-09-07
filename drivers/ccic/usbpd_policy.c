@@ -1384,6 +1384,7 @@ policy_state usbpd_policy_snk_ready(struct policy_data *policy)
 
 		/* Command Check from AP */
 		CHECK_CMD(pd_data, MANAGER_REQ_NEW_POWER_SRC, PE_SNK_Select_Capability);
+		CHECK_CMD(pd_data, MANAGER_REQ_GET_SRC_CAP, PE_SNK_Get_Source_Cap);
 		CHECK_CMD(pd_data, MANAGER_REQ_PR_SWAP, PE_PRS_SNK_SRC_Send_Swap);
 		CHECK_CMD(pd_data, MANAGER_REQ_DR_SWAP, PE_DRS_Evaluate_Send_Port);
 		CHECK_CMD(pd_data, MANAGER_REQ_VCONN_SWAP, PE_VCS_Send_Swap);

@@ -219,7 +219,7 @@ static int slsi_net_open(struct net_device *dev)
 
 	memset(dev_addr_zero_check, 0, ETH_ALEN);
 	if (!memcmp(dev->dev_addr, dev_addr_zero_check, ETH_ALEN)) {
-#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 		if (SLSI_IS_VIF_INDEX_MHS(sdev, ndev_vif))
 			SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[SLSI_NET_INDEX_P2P]);
 		else
@@ -356,7 +356,7 @@ static u16 slsi_get_priority_from_tos_dscp(u8 *frame, u16 proto)
 		return FAPI_PRIORITY_QOS_UP0;
 	}
 /* DSCP table based in RFC8325 from Android 10 */
-#if (defined(ANDROID_VERSION) && ANDROID_VERSION >= 100000)
+#if (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 100000)
 	switch (dscp) {
 	case CS7:
 		return FAPI_PRIORITY_QOS_UP7;
@@ -1242,7 +1242,7 @@ int slsi_netif_add_locked(struct slsi_dev *sdev, const char *name, int ifnum)
 	/* We are not ready to send data yet. */
 	netif_carrier_off(dev);
 
-#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 	if (strcmp(name, CONFIG_SCSC_AP_INTERFACE_NAME) == 0)
 		SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[SLSI_NET_INDEX_P2P]);
 	else
@@ -1282,7 +1282,7 @@ int slsi_netif_dynamic_iface_add(struct slsi_dev *sdev, const char *name)
 
 	SLSI_MUTEX_LOCK(sdev->netdev_add_remove_mutex);
 
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000)
 	if (sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN] == sdev->netdev_ap) {
 		rcu_assign_pointer(sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN], NULL);
 		err = slsi_netif_add_locked(sdev, name, SLSI_NET_INDEX_P2PX_SWLAN);
@@ -1323,8 +1323,8 @@ int slsi_netif_init(struct slsi_dev *sdev)
 		SLSI_MUTEX_UNLOCK(sdev->netdev_add_remove_mutex);
 		return -EINVAL;
 	}
-#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000)
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 	if (slsi_netif_add_locked(sdev, CONFIG_SCSC_AP_INTERFACE_NAME, SLSI_NET_INDEX_P2PX_SWLAN) != 0) {
 		rtnl_lock();
 		slsi_netif_remove_locked(sdev, sdev->netdev[SLSI_NET_INDEX_WLAN]);
@@ -1340,8 +1340,8 @@ int slsi_netif_init(struct slsi_dev *sdev)
 		rtnl_lock();
 		slsi_netif_remove_locked(sdev, sdev->netdev[SLSI_NET_INDEX_WLAN]);
 		slsi_netif_remove_locked(sdev, sdev->netdev[SLSI_NET_INDEX_P2P]);
-#ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000)
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 		slsi_netif_remove_locked(sdev, sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]);
 #endif
 #endif

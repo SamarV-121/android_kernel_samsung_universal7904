@@ -60,7 +60,8 @@ static struct GAForensicINFO {
 	unsigned short proca_certificate_struct_app_name;
 	unsigned short proca_certificate_struct_app_name_size;
 	unsigned short hlist_node_struct_next;
-	char reserved[1024];
+	unsigned short struct_vfsmount_bp_mount;
+	char reserved[1022];
 	unsigned short  GAFINFOCheckSum;
 } GAFINFO = {
 	.ver = 0x0600, /* by hryhorii tur 2019 10 21 */
@@ -97,8 +98,9 @@ static struct GAForensicINFO {
 	.struct_mount_mnt_parent = offsetof(struct mount, mnt_parent),
 	.list_head_struct_next = offsetof(struct list_head, next),
 	.list_head_struct_prev = offsetof(struct list_head, prev),
-#ifdef CONFIG_KDP_NS
+#if defined(CONFIG_KDP_NS) || defined(CONFIG_RKP_NS_PROT)
 	.is_kdp_ns_on = true,
+	.struct_vfsmount_bp_mount = offsetof(struct vfsmount, bp_mount),
 #else
 	.is_kdp_ns_on = false,
 #endif

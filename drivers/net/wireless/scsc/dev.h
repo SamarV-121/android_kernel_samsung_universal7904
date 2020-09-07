@@ -128,11 +128,13 @@ static const u16 slsi_rates_table[3][2][10] = {
 #define SLSI_RX_WAKELOCK_TIME (1000)
 #define MAX_BA_BUFFER_SIZE 64
 #define NUM_BA_SESSIONS_PER_PEER 8
-#define MAX_CHANNEL_LIST 20
+#define SLSI_NCHO_MAX_CHANNEL_LIST 20
 #define SLSI_MAX_RX_BA_SESSIONS (8)
 #define SLSI_STA_ACTION_FRAME_BITMAP (SLSI_ACTION_FRAME_PUBLIC | SLSI_ACTION_FRAME_WMM | SLSI_ACTION_FRAME_WNM |\
 				      SLSI_ACTION_FRAME_QOS | SLSI_ACTION_FRAME_PROTECTED_DUAL |\
 				      SLSI_ACTION_FRAME_RADIO_MEASUREMENT)
+#define SLSI_STA_ACTION_FRAME_SUSPEND_BITMAP (SLSI_ACTION_FRAME_PUBLIC | SLSI_ACTION_FRAME_WMM | SLSI_ACTION_FRAME_WNM |\
+				      SLSI_ACTION_FRAME_QOS | SLSI_ACTION_FRAME_PROTECTED_DUAL)
 
 /* Default value for MIB SLSI_PSID_UNIFI_DISCONNECT_TIMEOUT + 1 sec*/
 #define SLSI_DEFAULT_AP_DISCONNECT_IND_TIMEOUT 3000
@@ -294,6 +296,8 @@ struct slsi_scan_result {
 	struct sk_buff *beacon;
 	struct slsi_scan_result *next;
 	int band;
+	u8 ssid[32];
+	u8 ssid_length;
 };
 
 /* Per Interface Scan Data
@@ -836,7 +840,7 @@ struct slsi_apf_capabilities {
 #ifdef CONFIG_SCSC_WLAN_WES_NCHO
 struct slsi_wes_mode_roam_scan_channels {
 	int n;
-	u8  channels[MAX_CHANNEL_LIST];
+	u8  channels[SLSI_NCHO_MAX_CHANNEL_LIST];
 };
 #endif
 
@@ -888,15 +892,16 @@ struct slsi_dev_config {
 
 	int                                     roam_scan_mode;
 
+	int                                     dfs_scan_mode;
+
+	int                                     ncho_mode;
+
 	/*WES mode roam scan channels*/
 	struct slsi_wes_mode_roam_scan_channels wes_roam_scan_list;
 #endif
 	struct slsi_802_11d_reg_domain          domain_info;
-
 	int                                     ap_disconnect_ind_timeout;
-
 	u8                                      host_state;
-
 	int                                     rssi_boost_5g;
 	int                                     rssi_boost_2g;
 	bool                                    disable_ch12_ch13;
@@ -1175,6 +1180,8 @@ struct slsi_dev {
 #ifdef CONFIG_SCSC_WLAN_ENHANCED_PKT_FILTER
 	bool                       enhanced_pkt_filter_enabled;
 #endif
+	u8                         fw_ext_cap_ie[9]; /*extended capability IE length is 9 */
+	u32                        fw_ext_cap_ie_len;
 };
 
 /* Compact representation of channels a ESS has been seen on
@@ -1214,7 +1221,7 @@ void slsi_rx_dbg_sap_work(struct work_struct *work);
 void slsi_rx_netdev_data_work(struct work_struct *work);
 void slsi_rx_netdev_mlme_work(struct work_struct *work);
 int slsi_rx_enqueue_netdev_mlme(struct slsi_dev *sdev, struct sk_buff *skb, u16 vif);
-void slsi_rx_scan_pass_to_cfg80211(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
+struct ieee80211_channel *slsi_rx_scan_pass_to_cfg80211(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
 void slsi_rx_buffered_frames(struct slsi_dev *sdev, struct net_device *dev, struct slsi_peer *peer);
 int slsi_rx_blocking_signals(struct slsi_dev *sdev, struct sk_buff *skb);
 void slsi_scan_complete(struct slsi_dev *sdev, struct net_device *dev, u16 scan_id, bool aborted);

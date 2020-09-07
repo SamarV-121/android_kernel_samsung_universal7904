@@ -281,7 +281,6 @@ static void fimc_is_lib_camera_callback(void *this, enum lib_cb_event_type event
 {
 	struct fimc_is_hardware *hardware;
 	struct fimc_is_hw_ip *hw_ip;
-	struct fimc_is_group *head;
 	ulong fcount;
 	u32 hw_fcount, index;
 	bool ret = false;
@@ -344,10 +343,6 @@ static void fimc_is_lib_camera_callback(void *this, enum lib_cb_event_type event
 		}
 		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
 		wake_up(&hw_ip->status.wait_queue);
-
-		head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[instance_id]);
-		if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state))
-			up(&hw_ip->smp_resource);
 
 		CALL_HW_OPS(hw_ip, clk_gate, instance_id, false, false);
 		break;

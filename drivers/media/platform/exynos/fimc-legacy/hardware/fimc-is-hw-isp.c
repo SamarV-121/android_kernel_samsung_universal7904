@@ -285,7 +285,6 @@ static int fimc_is_hw_isp_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	struct isp_param_set *param_set;
 	struct is_region *region;
 	struct isp_param *param;
-	struct fimc_is_group *head;
 	u32 lindex, hindex;
 	bool frame_done = false;
 	u32 fcount = frame->fcount + frame->cur_buf_index;
@@ -301,15 +300,6 @@ static int fimc_is_hw_isp_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	if (!test_bit(HW_INIT, &hw_ip->state)) {
 		mserr_hw("not initialized!!", frame->instance, hw_ip);
 		return -EINVAL;
-	}
-
-	head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[frame->instance]);
-	if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state)) {
-		ret = down_interruptible(&hw_ip->smp_resource);
-		if (ret) {
-			mserr_hw(" down fail(%d)", frame->instance, hw_ip, ret);
-			return -EINVAL;
-		}
 	}
 
 	fimc_is_hw_g_ctrl(hw_ip, hw_ip->id, HW_G_CTRL_FRM_DONE_WITH_DMA, (void *)&frame_done);
@@ -549,7 +539,6 @@ static int fimc_is_hw_isp_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_i
 {
 	int ret = 0;
 	int wq_id_ixc, wq_id_ixp, output_id;
-	struct fimc_is_group *head;
 
 	BUG_ON(!hw_ip);
 	BUG_ON(!frame);
@@ -586,10 +575,6 @@ static int fimc_is_hw_isp_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_i
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, -1,
 				output_id, done_type, false);
 	}
-
-	head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[instance]);
-	if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state))
-		up(&hw_ip->smp_resource);
 
 	return ret;
 }
