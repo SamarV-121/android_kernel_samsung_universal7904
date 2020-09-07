@@ -61,7 +61,12 @@
 #define CMD_REASSOC             "REASSOC"
 #define CMD_SETROAMSCANCHANNELS         "SETROAMSCANCHANNELS"
 #define CMD_GETROAMSCANCHANNELS         "GETROAMSCANCHANNELS"
+#define CMD_ADDROAMSCANCHANNELS         "ADDROAMSCANCHANNELS"
 #define CMD_SENDACTIONFRAME             "SENDACTIONFRAME"
+#define CMD_GETNCHOMODE                 "GETNCHOMODE"
+#define CMD_SETNCHOMODE                 "SETNCHOMODE"
+#define CMD_GETDFSSCANMODE                 "GETDFSSCANMODE"
+#define CMD_SETDFSSCANMODE                 "SETDFSSCANMODE"
 #define CMD_HAPD_MAX_NUM_STA            "HAPD_MAX_NUM_STA"
 #define CMD_COUNTRY            "COUNTRY"
 #define CMD_SEND_GK                               "SEND_GK"
@@ -130,7 +135,10 @@
 #ifdef CONFIG_SCSC_WLAN_ENHANCED_PKT_FILTER
 #define CMD_ENHANCED_PKT_FILTER "ENHANCED_PKT_FILTER"
 #endif
+
+#ifdef CONFIG_SCSC_WLAN_MAX_LINK_SPEED
 #define CMD_GET_MAX_LINK_SPEED "GET_MAX_LINK_SPEED"
+#endif
 
 #ifdef CONFIG_SCSC_WLAN_SET_NUM_ANTENNAS
 #define CMD_SET_NUM_ANTENNAS "SET_NUM_ANTENNAS"
@@ -598,7 +606,7 @@ static int slsi_p2p_lo_start(struct net_device *dev, char *command)
 		}
 
 		ndev_vif->activated = true;
-		ndev_vif->mgmt_tx_data.exp_frame = SLSI_P2P_PA_INVALID;
+		ndev_vif->mgmt_tx_data.exp_frame = SLSI_PA_INVALID;
 		SLSI_P2P_STATE_CHANGE(sdev, P2P_IDLE_VIF_ACTIVE);
 
 		ret = slsi_mlme_register_action_frame(sdev, dev, SLSI_ACTION_FRAME_PUBLIC, SLSI_ACTION_FRAME_PUBLIC);
@@ -683,7 +691,7 @@ static ssize_t slsi_rx_filter_num_write(struct net_device *dev, int add_remove, 
 }
 
 #ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION < 90000)
+#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 90000)
 static ssize_t slsi_create_interface(struct net_device *dev, char *intf_name)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
@@ -770,6 +778,7 @@ static ssize_t slsi_get_indoor_channels(struct net_device *dev, char *command, i
 	return len;
 }
 #endif
+
 static ssize_t slsi_set_country_rev(struct net_device *dev, char *country_code)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
@@ -804,16 +813,134 @@ static ssize_t slsi_get_country_rev(struct net_device *dev, char *command, int b
 	return len;
 }
 
+static ssize_t slsi_freq_band_write(struct net_device *dev, uint band)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+#ifdef CONFIG_SCSC_WLAN_WES_NCHO
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int                ret = 0;
+#endif
+
+	if (slsi_is_test_mode_enabled()) {
+		slsi_band_update(sdev, band);
+		/* Convert to correct Mib value (intra_band:1, all_band:2) */
+		return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_BAND, (band == SLSI_FREQ_BAND_AUTO) ? 2 : 1);
+	}
+
+#ifdef CONFIG_SCSC_WLAN_WES_NCHO
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	if (band < 0 || band > 2) {
+		SLSI_ERR(sdev, "Invalid Band: Must be 0/1/2 Not '%c'\n", band);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	if (sdev->device_config.supported_band == band) {
+		SLSI_DBG1_NODEV(SLSI_MLME, "band is already %d\n", band);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return ret;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+
+	SLSI_DBG1_NODEV(SLSI_MLME, "mlme_set_band_req(vif:%u band:%u)\n", ndev_vif->ifnum, band);
+
+	req = fapi_alloc(mlme_set_band_req, MLME_SET_BAND_REQ, ndev_vif->ifnum, 0);
+	fapi_set_u16(req, u.mlme_set_band_req.vif, ndev_vif->ifnum);
+	fapi_set_u16(req, u.mlme_set_band_req.band, band);
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_BAND_CFM);
+	if (!cfm) {
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		return -EIO;
+	}
+
+	if (fapi_get_u16(cfm, u.mlme_set_band_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "mlme_set_band_cfm(result:0x%04x) ERROR\n",
+			     fapi_get_u16(cfm, u.mlme_set_band_cfm.result_code));
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		ret = -EINVAL;
+	}
+
+	slsi_kfree_skb(cfm);
+
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	sdev->device_config.supported_band = band;
+	slsi_band_cfg_update(sdev, band);
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	return ret;
+#else
+	SLSI_ERR(sdev, "NCHO is not supported\n");
+
+	return -EINVAL;
+#endif
+}
+
+static ssize_t slsi_freq_band_read(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	char              buf[128];
+	int               pos = 0;
+	const size_t      bufsz = sizeof(buf);
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (slsi_is_test_mode_enabled())
+		goto read_band;
+
+#ifdef CONFIG_SCSC_WLAN_WES_NCHO
+	if (sdev->device_config.ncho_mode)
+		goto read_band;
+#endif
+
+	SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+	pos = -EINVAL;
+	goto exit;
+
+read_band:
+	memset(buf, '\0', 128);
+	pos += scnprintf(buf + pos, bufsz - pos, "Band %d", sdev->device_config.supported_band);
+	buf[pos] = '\0';
+	memcpy(command, buf, pos + 1);
+
+exit:
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+	return pos;
+}
+
 #ifdef CONFIG_SCSC_WLAN_WES_NCHO
 static ssize_t slsi_roam_scan_trigger_write(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
+	int               ret = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	slsi_str_to_int(command, &mib_value);
-
-	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_RSSI_ROAM_SCAN_TRIGGER, mib_value);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	ret = slsi_mlme_set_roaming_parameters(sdev, dev, SLSI_PSID_UNIFI_ROAM_NCHO_RSSI_TRIGGER, mib_value, 1);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return ret;
 }
 
 static ssize_t slsi_roam_scan_trigger_read(struct net_device *dev, char *command, int buf_len)
@@ -823,7 +950,15 @@ static ssize_t slsi_roam_scan_trigger_read(struct net_device *dev, char *command
 	int               mib_value = 0;
 	int               res;
 
-	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_RSSI_ROAM_SCAN_TRIGGER, &mib_value);
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_NCHO_RSSI_TRIGGER, &mib_value);
 	if (res)
 		return res;
 	res = snprintf(command, buf_len, "%s %d", CMD_GETROAMTRIGGER, mib_value);
@@ -835,10 +970,21 @@ static ssize_t slsi_roam_delta_trigger_write(struct net_device *dev, char *comma
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
+	int               ret = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	slsi_str_to_int(command, &mib_value);
-
-	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_DELTA_TRIGGER, mib_value);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	ret = slsi_mlme_set_roaming_parameters(sdev, dev, SLSI_PSID_UNIFI_ROAM_NCHO_RSSI_DELDA, mib_value, 1);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return ret;
 }
 
 static ssize_t slsi_roam_delta_trigger_read(struct net_device *dev, char *command, int buf_len)
@@ -848,7 +994,15 @@ static ssize_t slsi_roam_delta_trigger_read(struct net_device *dev, char *comman
 	int               mib_value = 0;
 	int               res;
 
-	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_DELTA_TRIGGER, &mib_value);
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_NCHO_RSSI_DELDA, &mib_value);
 	if (res)
 		return res;
 
@@ -856,14 +1010,71 @@ static ssize_t slsi_roam_delta_trigger_read(struct net_device *dev, char *comman
 	return res;
 }
 
+static ssize_t slsi_reassoc_write(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif   *ndev_vif = netdev_priv(dev);
+	struct slsi_dev     *sdev = ndev_vif->sdev;
+	u8                  bssid[6] = { 0 };
+	int                 channel;
+	int                 freq;
+	enum nl80211_band band = NL80211_BAND_2GHZ;
+	int                 r = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	if (command[17] != ' ') {
+		SLSI_ERR(sdev, "Invalid Format '%s' '%c'\n", command, command[17]);
+		return -EINVAL;
+	}
+
+	command[17] = '\0';
+
+	slsi_machexstring_to_macarray(command, bssid);
+
+	if (!slsi_str_to_int(&command[18], &channel)) {
+		SLSI_ERR(sdev, "Invalid channel string: '%s'\n", &command[18]);
+		return -EINVAL;
+	}
+
+	if (channel > 14)
+		band = NL80211_BAND_5GHZ;
+	freq = (u16)ieee80211_channel_to_frequency(channel, band);
+
+	ndev_vif = netdev_priv(dev);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+
+	r = slsi_mlme_roam(sdev, dev, bssid, freq);
+
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return r;
+}
+
 static ssize_t slsi_cached_channel_scan_period_write(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
+	int               ret = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	slsi_str_to_int(command, &mib_value);
-	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_CACHED_CHANNEL_SCAN_PERIOD, mib_value * 1000000);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	ret = slsi_mlme_set_roaming_parameters(sdev, dev, SLSI_PSID_UNIFI_NCHO_CACHED_SCAN_PERIOD, mib_value * 1000000, 4);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return ret;
 }
 
 static ssize_t slsi_cached_channel_scan_period_read(struct net_device *dev, char *command, int buf_len)
@@ -873,7 +1084,15 @@ static ssize_t slsi_cached_channel_scan_period_read(struct net_device *dev, char
 	int               mib_value = 0;
 	int               res;
 
-	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_CACHED_CHANNEL_SCAN_PERIOD, &mib_value);
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_NCHO_CACHED_SCAN_PERIOD, &mib_value);
 	if (res)
 		return res;
 
@@ -887,10 +1106,21 @@ static ssize_t slsi_full_roam_scan_period_write(struct net_device *dev, char *co
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
+	int               ret = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	slsi_str_to_int(command, &mib_value);
-
-	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_FULL_ROAM_SCAN_PERIOD, mib_value * 1000000);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	ret = slsi_mlme_set_roaming_parameters(sdev, dev, SLSI_PSID_UNIFI_ROAM_NCHO_FULL_SCAN_PERIOD, mib_value * 1000000, 4);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return ret;
 }
 
 static ssize_t slsi_full_roam_scan_period_read(struct net_device *dev, char *command, int buf_len)
@@ -900,7 +1130,15 @@ static ssize_t slsi_full_roam_scan_period_read(struct net_device *dev, char *com
 	int               mib_value = 0;
 	int               res;
 
-	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_FULL_ROAM_SCAN_PERIOD, &mib_value);
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_NCHO_FULL_SCAN_PERIOD, &mib_value);
 	if (res)
 		return res;
 
@@ -915,6 +1153,14 @@ static ssize_t slsi_roam_scan_max_active_channel_time_write(struct net_device *d
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	slsi_str_to_int(command, &mib_value);
 
 	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_MAX_ACTIVE_CHANNEL_TIME, mib_value);
@@ -926,6 +1172,14 @@ static ssize_t slsi_roam_scan_max_active_channel_time_read(struct net_device *de
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_MAX_ACTIVE_CHANNEL_TIME, &mib_value);
 	if (res)
@@ -942,6 +1196,14 @@ static ssize_t slsi_roam_scan_probe_interval_write(struct net_device *dev, char 
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	slsi_str_to_int(command, &mib_value);
 	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_NPROBE, mib_value);
 }
@@ -952,6 +1214,14 @@ static ssize_t slsi_roam_scan_probe_interval_read(struct net_device *dev, char *
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_NPROBE, &mib_value);
 	if (res)
@@ -967,6 +1237,14 @@ static ssize_t slsi_roam_mode_write(struct net_device *dev, char *command, int b
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	if (slsi_is_rf_test_mode_enabled()) {
 		SLSI_DBG1_NODEV(SLSI_MLME, "SLSI_PSID_UNIFI_ROAM_MODE is not supported because of rf test mode.\n");
@@ -984,6 +1262,14 @@ static ssize_t slsi_roam_mode_read(struct net_device *dev, char *command, int bu
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_MODE, &mib_value);
 	if (res)
@@ -1050,6 +1336,14 @@ static ssize_t slsi_roam_scan_band_write(struct net_device *dev, char *command, 
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	slsi_str_to_int(command, &mib_value);
 	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_BAND, mib_value);
 }
@@ -1061,6 +1355,14 @@ static ssize_t slsi_roam_scan_band_read(struct net_device *dev, char *command, i
 	int               mib_value = 0;
 	int               res;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_BAND, &mib_value);
 	if (res)
 		return res;
@@ -1070,39 +1372,18 @@ static ssize_t slsi_roam_scan_band_read(struct net_device *dev, char *command, i
 	return res;
 }
 
-static ssize_t slsi_freq_band_write(struct net_device *dev, uint band)
-{
-	struct netdev_vif *ndev_vif = netdev_priv(dev);
-	struct slsi_dev   *sdev = ndev_vif->sdev;
-
-	slsi_band_update(sdev, band);
-	/* Convert to correct Mib value (intra_band:1, all_band:2) */
-	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_BAND, (band == SLSI_FREQ_BAND_AUTO) ? 2 : 1);
-}
-
-static ssize_t slsi_freq_band_read(struct net_device *dev, char *command, int buf_len)
-{
-	struct netdev_vif *ndev_vif = netdev_priv(dev);
-	struct slsi_dev   *sdev = ndev_vif->sdev;
-	char              buf[128];
-	int               pos = 0;
-	const size_t      bufsz = sizeof(buf);
-
-	memset(buf, '\0', 128);
-	pos += scnprintf(buf + pos, bufsz - pos, "Band %d", sdev->device_config.supported_band);
-
-	buf[pos] = '\0';
-	memcpy(command, buf, pos + 1);
-
-	return pos;
-}
-
 static ssize_t slsi_roam_scan_control_write(struct net_device *dev, int mode)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
 
 	if (mode == 0 || mode == 1) {
 		sdev->device_config.roam_scan_mode = mode;
@@ -1123,6 +1404,14 @@ static ssize_t slsi_roam_scan_control_read(struct net_device *dev, char *command
 	int               mib_value = 0;
 	int               res;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_CONTROL, &mib_value);
 	if (res)
 		return res;
@@ -1138,6 +1427,14 @@ static ssize_t slsi_roam_scan_home_time_write(struct net_device *dev, char *comm
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	slsi_str_to_int(command, &mib_value);
 
 	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_HOME_TIME, mib_value);
@@ -1149,6 +1446,14 @@ static ssize_t slsi_roam_scan_home_time_read(struct net_device *dev, char *comma
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_HOME_TIME, &mib_value);
 	if (res)
@@ -1165,6 +1470,14 @@ static ssize_t slsi_roam_scan_home_away_time_write(struct net_device *dev, char 
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
 	slsi_str_to_int(command, &mib_value);
 	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_HOME_AWAY_TIME, mib_value);
 }
@@ -1175,6 +1488,14 @@ static ssize_t slsi_roam_scan_home_away_time_read(struct net_device *dev, char *
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	int               mib_value = 0;
 	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_SCAN_HOME_AWAY_TIME, &mib_value);
 	if (res)
@@ -1193,18 +1514,28 @@ static ssize_t slsi_roam_scan_channels_write(struct net_device *dev, char *comma
 	int               i, channel_count = 0;
 	int               offset = 0;
 	int               readbyte = 0;
-	int               channels[MAX_CHANNEL_LIST];
+	int               channels[SLSI_NCHO_MAX_CHANNEL_LIST];
+	int               ret = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
 
 	readbyte = slsi_str_to_int(command, &channel_count);
 
 	if (!readbyte) {
 		SLSI_ERR(sdev, "channel count: failed to read a numeric value");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 		return -EINVAL;
 	}
-	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
 
-	if (channel_count > MAX_CHANNEL_LIST)
-		channel_count = MAX_CHANNEL_LIST;
+	if (channel_count > SLSI_NCHO_MAX_CHANNEL_LIST)
+		channel_count = SLSI_NCHO_MAX_CHANNEL_LIST;
+
 	sdev->device_config.wes_roam_scan_list.n = channel_count;
 
 	for (i = 0; i < channel_count; i++) {
@@ -1218,6 +1549,17 @@ static ssize_t slsi_roam_scan_channels_write(struct net_device *dev, char *comma
 
 		sdev->device_config.wes_roam_scan_list.channels[i] = channels[i];
 	}
+
+	if (!sdev->device_config.roam_scan_mode) {
+		ret = slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_CONTROL, 1);
+		if (ret != SLSI_MIB_STATUS_SUCCESS) {
+			SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+			return -EINVAL;
+		} else {
+			sdev->device_config.roam_scan_mode = 1;
+		}
+	}
+
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
@@ -1237,6 +1579,13 @@ static ssize_t slsi_roam_scan_channels_read(struct net_device *dev, char *comman
 	int               channel_count = 0;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
 	channel_count = sdev->device_config.wes_roam_scan_list.n;
 	pos = scnprintf(channel_buf, sizeof(channel_buf), "%s %d", CMD_GETROAMSCANCHANNELS, channel_count);
 	for (i = 0; i < channel_count; i++)
@@ -1250,12 +1599,95 @@ static ssize_t slsi_roam_scan_channels_read(struct net_device *dev, char *comman
 	return pos;
 }
 
+static ssize_t slsi_roam_add_scan_channels(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	int               result = 0;
+	int               i, j, new_channel_count = 0;
+	int               offset = 0;
+	int               readbyte = 0;
+	int               new_channels[SLSI_NCHO_MAX_CHANNEL_LIST];
+	int               curr_channel_count = 0;
+	int               found = 0;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	if (sdev->device_config.roam_scan_mode) {
+		SLSI_ERR(sdev, "ROAM Scan Control must be 0, roam mode = %d\n", sdev->device_config.roam_scan_mode);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	if (sdev->device_config.wes_roam_scan_list.n == SLSI_NCHO_MAX_CHANNEL_LIST) {
+		SLSI_ERR(sdev, "Roam scan list is already full\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	readbyte = slsi_str_to_int(command, &new_channel_count);
+
+	if (!readbyte) {
+		SLSI_ERR(sdev, "channel count: failed to read a numeric value\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	curr_channel_count = sdev->device_config.wes_roam_scan_list.n;
+
+	for (i = 0; i < new_channel_count; i++) {
+		offset = offset + readbyte + 1;
+		readbyte = slsi_str_to_int(&command[offset], &new_channels[i]);
+		if (!readbyte) {
+			SLSI_ERR(sdev, "failed to read a numeric value\n");
+			SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+			return -EINVAL;
+		}
+		for (j = 0; j < curr_channel_count; j++) {
+			found = 0;
+			if (sdev->device_config.wes_roam_scan_list.channels[j] == new_channels[i]) {
+				found = 1;
+				break;
+			}
+		}
+		if (!found) {
+			sdev->device_config.wes_roam_scan_list.channels[curr_channel_count] = new_channels[i];
+			curr_channel_count++;
+		}
+		if (curr_channel_count > SLSI_NCHO_MAX_CHANNEL_LIST) {
+			curr_channel_count = SLSI_NCHO_MAX_CHANNEL_LIST;
+			break;
+		}
+	}
+
+	sdev->device_config.wes_roam_scan_list.n = curr_channel_count;
+
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	result = slsi_mlme_set_cached_channels(sdev, dev, curr_channel_count, sdev->device_config.wes_roam_scan_list.channels);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+
+	return result;
+}
+
 static ssize_t slsi_okc_mode_write(struct net_device *dev, int mode)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
 
 	if (mode == 0 || mode == 1) {
 		sdev->device_config.okc_mode = mode;
@@ -1277,6 +1709,12 @@ static ssize_t slsi_okc_mode_read(struct net_device *dev, char *command, int buf
 	int               res;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
 	okc_mode = sdev->device_config.okc_mode;
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
@@ -1293,6 +1731,12 @@ static ssize_t slsi_wes_mode_write(struct net_device *dev, int mode)
 	u32               action_frame_bmap = SLSI_STA_ACTION_FRAME_BITMAP;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
 
 	if (mode == 0 || mode == 1) {
 		sdev->device_config.wes_mode = mode;
@@ -1325,6 +1769,12 @@ static ssize_t slsi_wes_mode_read(struct net_device *dev, char *command, int buf
 	int               res;
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
 	wes_mode = sdev->device_config.wes_mode;
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
@@ -1332,16 +1782,141 @@ static ssize_t slsi_wes_mode_read(struct net_device *dev, char *command, int buf
 
 	return res;
 }
+
+static ssize_t slsi_set_ncho_mode(struct net_device *dev, int mode)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int               ret = 0;
+
+	if (mode != 0 && mode != 1) {
+		SLSI_ERR(sdev, "Invalid NCHO Mode: Must be 0 or 1, mode = %d\n", mode);
+		return -EINVAL;
+	}
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (sdev->device_config.ncho_mode == mode) {
+		SLSI_INFO(sdev, "ncho_mode is already %d\n", mode);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return ret;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+
+	if (ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTED) {
+		SLSI_NET_ERR(dev, "sta is not in connected state\n");
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		return -EPERM;
+	}
+
+	SLSI_DBG1_NODEV(SLSI_MLME, "mlme_set_roaming_type_req(vif:%u mode:%u)\n", ndev_vif->ifnum, mode);
+
+	req = fapi_alloc(mlme_set_roaming_type_req, MLME_SET_ROAMING_TYPE_REQ, ndev_vif->ifnum, 0);
+	fapi_set_u16(req, u.mlme_set_roaming_type_req.vif, ndev_vif->ifnum);
+	fapi_set_u16(req, u.mlme_set_roaming_type_req.roaming_type, mode);
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_ROAMING_TYPE_CFM);
+	if (!cfm) {
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		return -EIO;
+	}
+
+	if (fapi_get_u16(cfm, u.mlme_set_roaming_type_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "mlme_set_roaming_type_cfm(result:0x%04x) ERROR\n",
+			     fapi_get_u16(cfm, u.mlme_set_roaming_type_cfm.result_code));
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		ret = -EINVAL;
+	}
+
+	slsi_kfree_skb(cfm);
+
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	sdev->device_config.ncho_mode = mode;
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	return ret;
+}
+
+static ssize_t slsi_get_ncho_mode(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	int               ret;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	ret = snprintf(command, buf_len, "%s %d", CMD_GETNCHOMODE, sdev->device_config.ncho_mode);
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	return ret;
+}
+
+static ssize_t slsi_set_dfs_scan_mode(struct net_device *dev, int mode)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	if (mode > 0 || mode <= 2) {
+		sdev->device_config.dfs_scan_mode = mode;
+	} else {
+		SLSI_ERR(sdev, "Invalid dfs scan mode: Must be 0/1 or 2, Not '%c'\n", mode);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+	return slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_DFS_SCAN_MODE, sdev->device_config.dfs_scan_mode);
+}
+
+static ssize_t slsi_get_dfs_scan_mode(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	int               mib_value = 0;
+	int               res;
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	if (!sdev->device_config.ncho_mode) {
+		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	res = slsi_get_mib_roam(sdev, SLSI_PSID_UNIFI_ROAM_DFS_SCAN_MODE, &mib_value);
+	if (res)
+		return res;
+
+	res = snprintf(command, buf_len, "%s %d", CMD_GETDFSSCANMODE, mib_value);
+
+	return res;
+}
+
 #endif
 
 static ssize_t slsi_set_pmk(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
-	u8                pmk[33];
+	u8                pmk[33] = {0};
 	int               result = 0;
 
-	memcpy((u8 *)pmk, command + strlen("SET_PMK "), 32);
+	if ((buf_len - (strlen(CMD_SET_PMK) + 1)) < 32)
+		return -EINVAL;
+
+	memcpy((u8 *)pmk, command + (strlen(CMD_SET_PMK) + 1), 32);
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
 	result = slsi_mlme_set_pmk(sdev, dev, pmk, 32);
@@ -1434,43 +2009,6 @@ if ((ndev_sta_vif->activated) && (ndev_sta_vif->vif_type == FAPI_VIFTYPE_STATION
 	return slsi_auto_chan_select_scan(sdev, count_channels, channels);
 }
 
-static ssize_t slsi_reassoc_write(struct net_device *dev, char *command, int buf_len)
-{
-	struct netdev_vif   *ndev_vif = netdev_priv(dev);
-	struct slsi_dev     *sdev = ndev_vif->sdev;
-	u8                  bssid[6] = { 0 };
-	int                 channel;
-	int                 freq;
-	enum ieee80211_band band = IEEE80211_BAND_2GHZ;
-	int                 r = 0;
-
-	if (command[17] != ' ') {
-		SLSI_ERR(sdev, "Invalid Format '%s' '%c'\n", command, command[17]);
-		return -EINVAL;
-	}
-
-	command[17] = '\0';
-
-	slsi_machexstring_to_macarray(command, bssid);
-
-	if (!slsi_str_to_int(&command[18], &channel)) {
-		SLSI_ERR(sdev, "Invalid channel string: '%s'\n", &command[18]);
-		return -EINVAL;
-	}
-
-	if (channel > 14)
-		band = IEEE80211_BAND_5GHZ;
-	freq = (u16)ieee80211_channel_to_frequency(channel, band);
-
-	ndev_vif = netdev_priv(dev);
-	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
-
-	r = slsi_mlme_roam(sdev, dev, bssid, freq);
-
-	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
-	return r;
-}
-
 static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif    *ndev_vif = netdev_priv(dev);
@@ -1502,29 +2040,36 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 	}
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 
-	command[17] = '\0';
+	if (buf_len < 17)
+		return -EINVAL;
 	slsi_machexstring_to_macarray(command, bssid);
 
-	command[17] = ' ';
 	pos = strchr(command, ' ');
-	if (pos == NULL)
+	if (!pos)
 		return -EINVAL;
-	*pos++ = '\0';
+	buf_len = buf_len - (pos - command + 1);
+	if (buf_len <= 0)
+		return -EINVAL;
+	pos++;
 
 	if (!slsi_str_to_int(pos, &channel)) {
 		SLSI_ERR(sdev, "Invalid channel string: '%s'\n", pos);
 		return -EINVAL;
 	}
-	pos++;
 
 	if (channel > 14)
 		band = IEEE80211_BAND_5GHZ;
 	freq = (u16)ieee80211_channel_to_frequency(channel, band);
+	if (!freq)
+		return -EINVAL;
 
 	pos = strchr(pos, ' ');
-	if (pos == NULL)
+	if (!pos)
 		return -EINVAL;
-	*pos++ = '\0';
+	buf_len = buf_len - (pos - command + 1);
+	if (buf_len <= 0)
+		return -EINVAL;
+	pos++;
 
 	if (!slsi_str_to_int(pos, &dwell_time)) {
 		SLSI_ERR(sdev, "Invalid dwell time string: '%s'\n", pos);
@@ -1532,7 +2077,10 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 	}
 
 	pos = strchr(pos, ' ');
-	if (pos == NULL)
+	if (!pos)
+		return -EINVAL;
+	buf_len = buf_len - (pos - command + 1);
+	if (buf_len <= 0)
 		return -EINVAL;
 	pos++;
 
@@ -1546,7 +2094,7 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 		return -EINVAL;
 	buf = kmalloc((len + 1) / 2, GFP_KERNEL);
 
-	if (buf == NULL) {
+	if (!buf) {
 		SLSI_ERR(sdev, "Malloc  failed\n");
 		return -ENOMEM;
 	}
@@ -1563,7 +2111,7 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 
 	final_length = len + IEEE80211_HEADER_SIZE;
 	final_buf = kmalloc(final_length, GFP_KERNEL);
-	if (final_buf == NULL) {
+	if (!final_buf) {
 		SLSI_ERR(sdev, "Malloc  failed\n");
 		kfree(buf);
 		return -ENOMEM;
@@ -1634,9 +2182,9 @@ static ssize_t slsi_forward_beacon(struct net_device *dev, char *action)
 	int               ret = 0;
 
 	if (strncasecmp(action, "stop", 4) == 0) {
-		intended_action = FAPI_ACTION_STOP;
+		intended_action = FAPI_WIPSACTION_STOP;
 	} else if (strncasecmp(action, "start", 5) == 0) {
-		intended_action = FAPI_ACTION_START;
+		intended_action = FAPI_WIPSACTION_START;
 	} else {
 		SLSI_NET_ERR(dev, "BEACON_RECV should be used with start or stop\n");
 		return -EINVAL;
@@ -1652,8 +2200,8 @@ static ssize_t slsi_forward_beacon(struct net_device *dev, char *action)
 		goto exit_vif_mutex;
 	}
 
-	if (((intended_action == FAPI_ACTION_START) && netdev_vif->is_wips_running) ||
-	    ((intended_action == FAPI_ACTION_STOP) && !netdev_vif->is_wips_running)) {
+	if (((intended_action == FAPI_WIPSACTION_START) && netdev_vif->is_wips_running) ||
+	    ((intended_action == FAPI_WIPSACTION_STOP) && !netdev_vif->is_wips_running)) {
 		SLSI_NET_INFO(dev, "Forwarding beacon is already %s!!\n",
 			      netdev_vif->is_wips_running ? "running" : "stopped");
 		ret = 0;
@@ -1661,7 +2209,7 @@ static ssize_t slsi_forward_beacon(struct net_device *dev, char *action)
 	}
 
 	SLSI_MUTEX_LOCK(netdev_vif->scan_mutex);
-	if (intended_action == FAPI_ACTION_START &&
+	if (intended_action == FAPI_WIPSACTION_START &&
 	    (netdev_vif->scan[SLSI_SCAN_HW_ID].scan_req || netdev_vif->sta.roam_in_progress)) {
 		SLSI_NET_ERR(dev, "Rejecting BEACON_RECV start as scan/roam is running\n");
 		ret = -EBUSY;
@@ -2141,7 +2689,7 @@ int slsi_get_sta_info(struct net_device *dev, char *command, int buf_len)
 		return -EINVAL;
 	}
 
-#if defined(ANDROID_VERSION) && (ANDROID_VERSION >= 90000)
+#if defined(SCSC_SEP_VERSION) && (SCSC_SEP_VERSION >= 90000)
 	len = snprintf(command, buf_len, "GETSTAINFO %pM Rx_Retry_Pkts=%d Rx_BcMc_Pkts=%d CAP=%04x %02x:%02x:%02x ",
 		       ndev_vif->ap.last_disconnected_sta.address,
 		       ndev_vif->ap.last_disconnected_sta.rx_retry_packets,
@@ -2209,6 +2757,7 @@ static int slsi_get_bss_info(struct net_device *dev, char *command, int buf_len)
 	return len;
 }
 
+#ifdef CONFIG_SCSC_WLAN_MAX_LINK_SPEED
 static int slsi_get_linkspeed(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif    *ndev_vif = netdev_priv(dev);
@@ -2236,6 +2785,7 @@ static int slsi_get_linkspeed(struct net_device *dev, char *command, int buf_len
 
 	return len;
 }
+#endif
 
 static int slsi_get_assoc_reject_info(struct net_device *dev, char *command, int buf_len)
 {
@@ -2469,7 +3019,7 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 		ret = slsi_rx_filter_num_write(dev, 0, filter_num);
 #ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION < 90000)
+#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 90000)
 	} else if (strncasecmp(command, CMD_INTERFACE_CREATE, strlen(CMD_INTERFACE_CREATE)) == 0) {
 		char *intf_name = command + strlen(CMD_INTERFACE_CREATE) + 1;
 
@@ -2492,6 +3042,16 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		ret = slsi_set_country_rev(dev, country_code);
 	} else if (strncasecmp(command, CMD_GETCOUNTRYREV, strlen(CMD_GETCOUNTRYREV)) == 0) {
 		ret = slsi_get_country_rev(dev, command, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_SETROAMBAND, strlen(CMD_SETROAMBAND)) == 0) {
+		uint band = *(command + strlen(CMD_SETROAMBAND) + 1) - '0';
+
+		ret = slsi_freq_band_write(dev, band);
+	} else if (strncasecmp(command, CMD_SETBAND, strlen(CMD_SETBAND)) == 0) {
+		uint band = *(command + strlen(CMD_SETBAND) + 1) - '0';
+
+		ret = slsi_freq_band_write(dev, band);
+	} else if ((strncasecmp(command, CMD_GETROAMBAND, strlen(CMD_GETROAMBAND)) == 0) || (strncasecmp(command, CMD_GETBAND, strlen(CMD_GETBAND)) == 0)) {
+			ret = slsi_freq_band_read(dev, command, priv_cmd.total_len);
 #ifdef CONFIG_SCSC_WLAN_WES_NCHO
 	} else if (strncasecmp(command, CMD_SETROAMTRIGGER, strlen(CMD_SETROAMTRIGGER)) == 0) {
 		int skip = strlen(CMD_SETROAMTRIGGER) + 1;
@@ -2549,16 +3109,6 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 						priv_cmd.total_len - skip);
 	} else if (strncasecmp(command, CMD_GETROAMINTRABAND, strlen(CMD_GETROAMINTRABAND)) == 0) {
 		ret = slsi_roam_scan_band_read(dev, command, priv_cmd.total_len);
-	} else if (strncasecmp(command, CMD_SETROAMBAND, strlen(CMD_SETROAMBAND)) == 0) {
-		uint band = *(command + strlen(CMD_SETROAMBAND) + 1) - '0';
-
-		ret = slsi_freq_band_write(dev, band);
-	} else if (strncasecmp(command, CMD_SETBAND, strlen(CMD_SETBAND)) == 0) {
-		uint band = *(command + strlen(CMD_SETBAND) + 1) - '0';
-
-		ret = slsi_freq_band_write(dev, band);
-	} else if ((strncasecmp(command, CMD_GETROAMBAND, strlen(CMD_GETROAMBAND)) == 0) || (strncasecmp(command, CMD_GETBAND, strlen(CMD_GETBAND)) == 0)) {
-		ret = slsi_freq_band_read(dev, command, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_SETROAMSCANCONTROL, strlen(CMD_SETROAMSCANCONTROL)) == 0) {
 		int mode = *(command + strlen(CMD_SETROAMSCANCONTROL) + 1) - '0';
 
@@ -2599,6 +3149,27 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		}
 	} else if (strncasecmp(command, CMD_GETROAMSCANCHANNELS, strlen(CMD_GETROAMSCANCHANNELS)) == 0) {
 		ret = slsi_roam_scan_channels_read(dev, command, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_ADDROAMSCANCHANNELS, strlen(CMD_ADDROAMSCANCHANNELS)) == 0) {
+		u8 skip = strlen(CMD_ADDROAMSCANCHANNELS) + 1;
+		if (skip <= priv_cmd.total_len) {
+			ret = slsi_roam_add_scan_channels(dev, command + skip,
+						    priv_cmd.total_len - skip);
+		}
+	} else if (strncasecmp(command, CMD_GETNCHOMODE, strlen(CMD_GETNCHOMODE)) == 0) {
+		ret = slsi_get_ncho_mode(dev, command, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_SETNCHOMODE, strlen(CMD_SETNCHOMODE)) == 0) {
+		int mode = *(command + strlen(CMD_SETNCHOMODE) + 1) - '0';
+		ret = slsi_set_ncho_mode(dev, mode);
+	} else if (strncasecmp(command, CMD_SETDFSSCANMODE, strlen(CMD_SETDFSSCANMODE)) == 0) {
+		int mode = *(command + strlen(CMD_SETDFSSCANMODE) + 1) - '0';
+
+		ret = slsi_set_dfs_scan_mode(dev, mode);
+	} else if (strncasecmp(command, CMD_GETDFSSCANMODE, strlen(CMD_GETDFSSCANMODE)) == 0) {
+		ret = slsi_get_dfs_scan_mode(dev, command, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_REASSOC, strlen(CMD_REASSOC)) == 0) {
+		int skip = strlen(CMD_REASSOC) + 1;
+		ret = slsi_reassoc_write(dev, command + skip,
+					 priv_cmd.total_len - skip);
 #endif
 	} else if (strncasecmp(command, CMD_SET_PMK, strlen(CMD_SET_PMK)) == 0) {
 		ret = slsi_set_pmk(dev, command, priv_cmd.total_len);
@@ -2609,16 +3180,13 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		if (skip <= priv_cmd.total_len) {
 			ret = slsi_auto_chan_write(dev, command + skip);
 		}
-	} else if (strncasecmp(command, CMD_REASSOC, strlen(CMD_REASSOC)) == 0) {
-		int skip = strlen(CMD_REASSOC) + 1;
-
-		ret = slsi_reassoc_write(dev, command + skip,
-					 priv_cmd.total_len - skip);
 	} else if (strncasecmp(command, CMD_SENDACTIONFRAME, strlen(CMD_SENDACTIONFRAME)) == 0) {
 		int skip = strlen(CMD_SENDACTIONFRAME) + 1;
 
-		ret = slsi_send_action_frame(dev, command + skip,
-					     priv_cmd.total_len - skip);
+		if (skip < priv_cmd.total_len)
+			ret = slsi_send_action_frame(dev, command + skip, priv_cmd.total_len - skip);
+		else
+			ret = -EINVAL;
 	} else if (strncasecmp(command, CMD_HAPD_MAX_NUM_STA, strlen(CMD_HAPD_MAX_NUM_STA)) == 0) {
 		int sta_num;
 		u8 *max_sta = command + strlen(CMD_HAPD_MAX_NUM_STA) + 1;
@@ -2745,8 +3313,10 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 		ret = slsi_set_enhanced_pkt_filter(dev, enable);
 #endif
+#ifdef CONFIG_SCSC_WLAN_MAX_LINK_SPEED
 	} else if ((strncasecmp(command, CMD_GET_MAX_LINK_SPEED, strlen(CMD_GET_MAX_LINK_SPEED)) == 0)) {
 		ret = slsi_get_linkspeed(dev, command, priv_cmd.total_len);
+#endif
 	} else {
 		ret  = -ENOTSUPP;
 	}

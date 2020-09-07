@@ -663,10 +663,10 @@ static struct sk_buff *hip4_mbulk_to_skb(struct scsc_service *service, struct hi
 
 cont:
 	if (atomic)
-		skb = slsi_alloc_skb(bytes_to_alloc, GFP_ATOMIC);
+		skb = alloc_skb(bytes_to_alloc, GFP_ATOMIC);
 	else {
 		spin_unlock_bh(&hip_priv->rx_lock);
-		skb = slsi_alloc_skb(bytes_to_alloc, GFP_KERNEL);
+		skb = alloc_skb(bytes_to_alloc, GFP_KERNEL);
 		spin_lock_bh(&hip_priv->rx_lock);
 	}
 	if (!skb) {
@@ -1101,7 +1101,7 @@ consume_ctl_mbulk:
 #else
 		if (m->flag & MBULK_F_WAKEUP) {
 			SLSI_INFO(sdev, "WIFI wakeup by DATA frame:\n");
-			SCSC_BIN_TAG_INFO(BINARY, skb->data, fapi_get_siglen(skb) + ETH_HLEN);
+			SCSC_BIN_TAG_INFO(BINARY, fapi_get_data(skb), fapi_get_datalen(skb) > 54 ? 54 : fapi_get_datalen(skb));
 		}
 #endif
 #ifdef CONFIG_SCSC_WLAN_DEBUG

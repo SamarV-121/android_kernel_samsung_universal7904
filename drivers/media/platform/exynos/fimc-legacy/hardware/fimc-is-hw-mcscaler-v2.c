@@ -212,9 +212,6 @@ static int fimc_is_hw_mcsc_handle_interrupt(u32 id, void *context)
 			}
 
 			wake_up(&hw_ip->status.wait_queue);
-			head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[instance]);
-			if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state))
-				up(&hw_ip->smp_resource);
 			flag_clk_gate = true;
 			hw_ip->mframe = NULL;
 		}
@@ -788,15 +785,6 @@ static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 		return -EINVAL;
 	}
 
-	head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[frame->instance]);
-	if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state)) {
-		ret = down_interruptible(&hw_ip->smp_resource);
-		if (ret) {
-			mserr_hw(" down fail(%d)", frame->instance, hw_ip, ret);
-			return -EINVAL;
-		}
-	}
-
 	if ((!test_bit(ENTRY_M0P, &frame->out_flag))
 		&& (!test_bit(ENTRY_M1P, &frame->out_flag))
 		&& (!test_bit(ENTRY_M2P, &frame->out_flag))
@@ -808,6 +796,7 @@ static int fimc_is_hw_mcsc_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 	param = &hw_ip->region[instance]->parameter;
 	mcs_param = &param->mcs;
 
+	head = hw_ip->group[frame->instance]->head;
 	if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state)) {
 		if (!test_bit(HW_CONFIG, &hw_ip->state)
 			&& !atomic_read(&hardware->streaming[hardware->sensor_position[instance]]))
@@ -1439,17 +1428,12 @@ static int fimc_is_hw_mcsc_frame_ndone(struct fimc_is_hw_ip *hw_ip, struct fimc_
 	u32 instance, enum ShotErrorType done_type)
 {
 	int ret = 0;
-	struct fimc_is_group *head;
 
 	fimc_is_hw_mcsc_frame_done(hw_ip, frame, done_type);
 
 	if (test_bit_variables(hw_ip->id, &frame->core_flag))
 		ret = fimc_is_hardware_frame_done(hw_ip, frame, -1, FIMC_IS_HW_CORE_END,
 				done_type, false);
-
-	head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[instance]);
-	if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state))
-		up(&hw_ip->smp_resource);
 
 	return ret;
 }

@@ -460,6 +460,21 @@ void * fimc_is_gframe_rewind(struct fimc_is_groupmgr *groupmgr,
 	return gframe;
 }
 
+void *fimc_is_gframe_group_find(struct fimc_is_group *group, u32 target_fcount)
+{
+	struct fimc_is_group_frame *gframe;
+
+	BUG_ON(!group);
+	BUG_ON(group->instance >= FIMC_IS_STREAM_COUNT);
+
+	list_for_each_entry(gframe, &group->gframe_head, list) {
+		if (gframe->fcount == target_fcount)
+			return gframe;
+	}
+
+	return NULL;
+}
+
 int fimc_is_gframe_flush(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *group)
 {
@@ -2835,8 +2850,12 @@ int fimc_is_group_shot(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *gprev, *gnext;
 	struct fimc_is_group_frame *gframe;
 	struct fimc_is_group_task *gtask;
+	struct fimc_is_group *child;
+	struct fimc_is_group_task *gtask_child;
 	bool try_sdown = false;
 	bool try_rdown = false;
+	bool try_gdown[GROUP_ID_MAX] = {false};
+	u32 gtask_child_id = 0;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -2874,6 +2893,25 @@ int fimc_is_group_shot(struct fimc_is_groupmgr *groupmgr,
 		goto p_err_ignore;
 	}
 	try_rdown = true;
+
+	child = group->child;
+	while (child) {
+		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state))
+			break;
+
+		gtask_child = &groupmgr->gtask[child->id];
+		gtask_child_id = child->id;
+		child = child->child;
+		if (!test_bit(FIMC_IS_GTASK_START, &gtask_child->state))
+			continue;
+
+		ret = down_interruptible(&gtask_child->smp_resource);
+		if (ret) {
+			mgerr(" down fail(%d) #2", group, group, ret);
+			goto p_err_ignore;
+		}
+		try_gdown[gtask_child_id] = true;
+	}
 
 	if (device->sensor && !test_bit(FIMC_IS_SENSOR_FRONT_START, &device->sensor->state)) {
 		/*
@@ -3075,6 +3113,17 @@ p_skip_sync:
 	return ret;
 
 p_err_ignore:
+	child = group->child;
+	while (child) {
+		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state))
+			break;
+
+		gtask_child = &groupmgr->gtask[child->id];
+		if (try_gdown[child->id])
+			up(&gtask_child->smp_resource);
+		child = child->child;
+	}
+
 	if (try_sdown)
 		smp_shot_inc(group);
 
@@ -3088,6 +3137,18 @@ p_err_ignore:
 
 p_err_cancel:
 	fimc_is_group_cancel(group, frame);
+
+	child = group->child;
+	while (child) {
+		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state))
+			break;
+
+		gtask_child = &groupmgr->gtask[child->id];
+		if (try_gdown[child->id])
+			up(&gtask_child->smp_resource);
+
+		child = child->child;
+	}
 
 	if (try_sdown)
 		smp_shot_inc(group);
@@ -3116,6 +3177,7 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *child;
 #endif
 	ulong flags;
+	struct fimc_is_group_task *gtask_child;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -3180,8 +3242,8 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 	if (unlikely((done_state != VB2_BUF_STATE_DONE) && gnext)) {
 		spin_lock_irqsave(&gframemgr->gframe_slock, flags);
 
-		fimc_is_gframe_group_head(gnext, &gframe);
-		if (gframe && (gframe->fcount == frame->fcount)) {
+		gframe = fimc_is_gframe_group_find(gnext, frame->fcount);
+		if (gframe) {
 			ret = fimc_is_gframe_trans_grp_to_fre(gframemgr, gframe, gnext);
 			if (ret) {
 				mgerr("fimc_is_gframe_trans_grp_to_fre is fail(%d)", device, gnext, ret);
@@ -3192,6 +3254,18 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 		spin_unlock_irqrestore(&gframemgr->gframe_slock, flags);
 	}
 
+	child = group->child;
+	while (child) {
+		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state))
+			break;
+
+		gtask_child = &groupmgr->gtask[child->id];
+		child = child->child;
+		if (!test_bit(FIMC_IS_GTASK_START, &gtask_child->state))
+			continue;
+
+		up(&gtask_child->smp_resource);
+	}
 	smp_shot_inc(group);
 	up(&gtask->smp_resource);
 
