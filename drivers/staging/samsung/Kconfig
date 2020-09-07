@@ -25,7 +25,7 @@ menuconfig SEC_DEBUG
 	depends on EXYNOS_SNAPSHOT && SEC_REBOOT
 	default y
 
- config SEC_DEBUG_RESET_REASON
+config SEC_DEBUG_RESET_REASON
 	bool "Enable TN reset reason"
 	depends on SEC_DEBUG
 	default y
@@ -117,6 +117,13 @@ config CM_OFFSET
 	help
 	  set Charging Mode Offset when you enable SEC_PARAM.
 
+config FMM_LOCK_OFFSET
+	int "FMM lock Offset"
+	default 0
+	depends on SEC_PARAM
+	help
+	  set FMM lock Offset when you enable SEC_PARAM.
+
 config SEC_EVENT_LOG
 	bool "Enable Event log parser"
 	depends on SEC_EXT
@@ -184,6 +191,14 @@ config SEC_DEBUG_TSP_LOG
 	depends on SEC_EXT
 	help
 	  This option enables additional log buffer for tsp log.
+
+config SEC_DEBUG_SOFTDOG_PWDT
+	bool "Enable Soft Watchdog for Platform"
+	default y
+	depends on WATCHDOG
+	select SOFT_WATCHDOG
+	help
+	  This option enables soft watchdog device and soft_panic.
 
 comment "Samsung TN Power Management Options"
 menuconfig SEC_PM

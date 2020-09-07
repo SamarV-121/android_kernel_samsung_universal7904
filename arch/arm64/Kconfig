@@ -481,7 +481,7 @@ config CAVIUM_ERRATUM_27456
 
 config QCOM_FALKOR_ERRATUM_1003
 	bool "Falkor E1003: Incorrect translation due to ASID change"
-	default y
+	default n
 	select ARM64_PAN if ARM64_SW_TTBR0_PAN
 	help
 	  On Falkor v1, an incorrect ASID may be cached in the TLB when ASID

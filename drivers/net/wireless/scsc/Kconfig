@@ -269,3 +269,15 @@ config SCSC_WLAN_STA_ENHANCED_ARP_DETECT
         ---help---
           This option tells whether enhanced arp detection
           is enabled or not.
+
+config SCSC_WLAN_MAX_LINK_SPEED
+        bool "Enable max link speed calculation"
+        default n
+        ---help---
+        This option tells if max linkspeed calculation is enabled or not.
+
+config SCSC_WLAN_DUAL_STATION
+        bool "Enable dual station"
+        default n
+        ---help---
+        This option tells if dual station feature is supported or not.
