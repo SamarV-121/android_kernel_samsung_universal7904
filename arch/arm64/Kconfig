@@ -1320,3 +1320,15 @@ config FPSIMD_CORRUPTION_DETECT
 	help
 	  If FPSIMD has corruption, use this feature for detect problem.
 
+config EXYNOS7904_M20LTE_SWA_OPEN
+	bool "Galaxy M20"
+        default n
+        help
+	  Galaxy M20 DTS
+
+config EXYNOS7904_M30LTE_SWA_OPEN
+        bool "Galaxy M30"
+        default n
+        help
+          Galaxy M30 DTS
+
