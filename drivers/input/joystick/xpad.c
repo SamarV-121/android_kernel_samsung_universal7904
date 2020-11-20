@@ -1395,7 +1395,7 @@ struct xpad_led {
 	struct usb_xpad *xpad;
 };
 
-/**
+/*
  * set the LEDs on Xbox360 / Wireless Controllers
  * @param command
  *  0: off
