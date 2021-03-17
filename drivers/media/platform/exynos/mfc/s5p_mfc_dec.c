@@ -640,6 +640,7 @@ static int vidioc_querybuf(struct file *file, void *priv,
 static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_mfc_ctx(file->private_data);
+	struct s5p_mfc_dev *dev = ctx->dev;
 	int ret = -EINVAL;
 
 	mfc_debug_enter();
@@ -664,7 +665,7 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 			return -EIO;
 		}
 
-		s5p_mfc_qos_update_framerate(ctx);
+		s5p_mfc_qos_update_framerate(ctx, 0);
 
 		if (!buf->m.planes[0].bytesused) {
 			buf->m.planes[0].bytesused = ctx->vq_src.plane_sizes[0];
@@ -675,9 +676,12 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 		}
 		ret = vb2_qbuf(&ctx->vq_src, buf);
 	} else {
+		s5p_mfc_qos_update_framerate(ctx, 1);
 		ret = vb2_qbuf(&ctx->vq_dst, buf);
 		mfc_debug(2, "End of enqueue(%d) : %d\n", buf->index, ret);
 	}
+
+	atomic_inc(&dev->queued_cnt);
 
 	mfc_debug_leave();
 	return ret;

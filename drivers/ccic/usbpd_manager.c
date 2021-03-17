@@ -907,6 +907,32 @@ void usbpd_manager_acc_detach(struct device *dev)
 			schedule_delayed_work(&manager->acc_detach_handler, msecs_to_jiffies(0));
 	}
 }
+static int usbpd_manager_support_vdm(struct usbpd_data *pd_data,
+		usbpd_manager_command_type command)
+{
+	struct policy_data *policy = &pd_data->policy;
+	switch (command) {
+	case MANAGER_REQ_VDM_DISCOVER_SVID:
+		/* Product Type 101b == AMA */
+		if (policy->rx_data_obj[1].id_header_vdo.Product_Type == 0x5) {
+			pr_info("%s, Discover ID == AMA\n", __func__);
+			return 1;
+		}
+		return 0;
+	case MANAGER_REQ_VDM_DISCOVER_MODE:
+	case MANAGER_REQ_VDM_ENTER_MODE:
+	case MANAGER_REQ_VDM_STATUS_UPDATE:
+	case MANAGER_REQ_VDM_DisplayPort_Configure:
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+		return 1;
+#else
+		return 0;
+#endif
+	default:
+		return 1;
+	}
+}
+
 
 int usbpd_manager_command_to_policy(struct device *dev,
 		usbpd_manager_command_type command)
@@ -914,9 +940,10 @@ int usbpd_manager_command_to_policy(struct device *dev,
 	struct usbpd_data *pd_data = dev_get_drvdata(dev);
 	struct usbpd_manager_data *manager = &pd_data->manager;
 
-	manager->cmd |= command;
-
-	usbpd_kick_policy_work(dev);
+	if (usbpd_manager_support_vdm(pd_data, command)) {
+		manager->cmd |= command;
+		usbpd_kick_policy_work(dev);
+	}
 
 	/* TODO: check result
 	if (manager->event) {
@@ -1245,7 +1272,7 @@ int usbpd_manager_get_identity(struct usbpd_data *pd_data)
 	if (usbpd_manager_check_accessory(manager))
 		pr_info("%s, Samsung Accessory Connected.\n", __func__);
 
-	return 0;
+	return MANAGER_SUPPORT;
 }
 
 /* Ok : 0 (SVID_0 is DP support(0xff01)), NAK: -1 */
@@ -1260,10 +1287,12 @@ int usbpd_manager_get_svids(struct usbpd_data *pd_data)
 	pr_info("%s, SVID_0 : 0x%x, SVID_1 : 0x%x\n", __func__,
 				manager->SVID_0, manager->SVID_1);
 
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
 	if (manager->SVID_0 == TypeC_DP_SUPPORT)
-		return 0;
+		return MANAGER_SUPPORT;
+#endif
 
-	return -1;
+	return MANAGER_NOT_SUPPORT;
 }
 
 /* Ok : 0 (SVID_0 is DP support(0xff01)), NAK: -1 */
@@ -1276,8 +1305,11 @@ int usbpd_manager_get_modes(struct usbpd_data *pd_data)
 
 	pr_info("%s, Standard_Vendor_ID = 0x%x\n", __func__,
 				manager->Standard_Vendor_ID);
-
-	return 0;
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+	return MANAGER_SUPPORT;
+#else
+	return MANAGER_NOT_SUPPORT;
+#endif
 }
 
 int usbpd_manager_enter_mode(struct usbpd_data *pd_data)
@@ -1291,7 +1323,11 @@ int usbpd_manager_enter_mode(struct usbpd_data *pd_data)
 
 int usbpd_manager_exit_mode(struct usbpd_data *pd_data, unsigned mode)
 {
-	return 0;
+#if defined(CONFIG_CCIC_ALTERNATE_MODE)
+	return MANAGER_SUPPORT;
+#else
+	return MANAGER_NOT_SUPPORT;
+#endif
 }
 
 data_obj_type usbpd_manager_select_capability(struct usbpd_data *pd_data)
@@ -1403,6 +1439,11 @@ int usbpd_manager_evaluate_capability(struct usbpd_data *pd_data)
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	if (manager->flash_mode == 1)
 		available_pdo_num = 1;
+	if ((pdic_sink_status->available_pdo_num > 0) &&
+			(pdic_sink_status->available_pdo_num != available_pdo_num)) {
+		policy->send_sink_cap = 1;
+		pdic_sink_status->selected_pdo_num = 1;
+	}
 	pdic_sink_status->available_pdo_num = available_pdo_num;
 	return available_pdo_num;
 #endif

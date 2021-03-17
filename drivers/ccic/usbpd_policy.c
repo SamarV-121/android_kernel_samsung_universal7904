@@ -2992,7 +2992,7 @@ policy_state usbpd_policy_ufp_vdm_get_svids(struct policy_data *policy)
 	Request SVIDs information from DPM
 	**********************************************/
 
-	if (usbpd_manager_get_svids(pd_data) == 0)
+	if (usbpd_manager_get_svids(pd_data) == MANAGER_SUPPORT)
 		return PE_UFP_VDM_Send_SVIDs;
 	else
 		return PE_UFP_VDM_Get_SVIDs_NAK;
@@ -3100,7 +3100,7 @@ policy_state usbpd_policy_ufp_vdm_get_modes(struct policy_data *policy)
 	Request Modes information from DPM
 	**********************************************/
 
-	if (usbpd_manager_get_modes(pd_data))
+	if (usbpd_manager_get_modes(pd_data) == MANAGER_SUPPORT)
 		return PE_UFP_VDM_Send_Modes;
 	else
 		return PE_UFP_VDM_Get_Modes_NAK;
@@ -3207,7 +3207,7 @@ policy_state usbpd_policy_ufp_vdm_evaluate_mode_entry(struct policy_data *policy
 	//dev_info(pd_data->dev, "%s\n", __func__);
 
 	/* Certification: Ellisys: TD.PD.VDMU.E15.Applicability */
-	if (usbpd_manager_get_svids(pd_data) == 0)
+	if (usbpd_manager_get_svids(pd_data) == MANAGER_SUPPORT)
 		return PE_UFP_VDM_Mode_Entry_ACK;
 	else
 		return PE_UFP_VDM_Mode_Entry_NAK;
@@ -3325,15 +3325,12 @@ policy_state usbpd_policy_ufp_vdm_mode_exit(struct policy_data *policy)
 
 	/* get mode to exit */
 	mode_pos = policy->rx_data_obj[0].structured_vdm.obj_pos;
-	if (usbpd_manager_exit_mode(pd_data, mode_pos) == 0)
+	if (usbpd_manager_exit_mode(pd_data, mode_pos) == MANAGER_SUPPORT)
 		ret =  PE_UFP_VDM_Mode_Exit_ACK;
 
 	ret =  PE_UFP_VDM_Mode_Exit_NAK;
 
 	return ret;
-
-
-
 }
 
 policy_state usbpd_policy_ufp_vdm_mode_exit_ack(struct policy_data *policy)

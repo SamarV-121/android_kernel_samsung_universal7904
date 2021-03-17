@@ -1065,7 +1065,7 @@ struct decon_device {
 	unsigned int ignore_vsync;
 	struct abd_protect abd;
 	unsigned int esd_recovery;
-	atomic_t win_config;
+	atomic_t ffu_flag;	/* first frame update */
 
 #if defined(CONFIG_EXYNOS_DOZE)
 	unsigned int doze_state;

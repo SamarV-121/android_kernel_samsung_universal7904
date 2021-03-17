@@ -732,7 +732,7 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 			decon_err("skipped to disable decon\n");
 			goto blank_exit;
 		}
-		atomic_set(&decon->win_config, 1);
+		atomic_set(&decon->ffu_flag, 2);
 		break;
 	case FB_BLANK_UNBLANK:
 		DPU_EVENT_LOG(DPU_EVT_UNBLANK, &decon->sd, ktime_set(0, 0));
@@ -741,7 +741,7 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 			decon_err("skipped to enable decon\n");
 			goto blank_exit;
 		}
-		atomic_set(&decon->win_config, 1);
+		atomic_set(&decon->ffu_flag, 2);
 		break;
 	case FB_BLANK_VSYNC_SUSPEND:
 	case FB_BLANK_HSYNC_SUSPEND:
@@ -1619,6 +1619,14 @@ static void decon_update_regs(struct decon_device *decon,
 #endif
 			BUG();
 		}
+
+		if (decon->dt.out_type == DECON_OUT_DSI && atomic_read(&decon->ffu_flag)) {
+			if (regs->num_of_window) {
+				atomic_dec(&decon->ffu_flag);
+				decon_simple_notifier_call_chain(DECON_EVENT_FRAME_SEND, FB_BLANK_UNBLANK);
+			}
+		}
+
 		if(!video_emul)
 			decon_reg_set_trigger(decon->id, &psr, DECON_TRIG_DISABLE);
 	}
@@ -1766,16 +1774,10 @@ static int decon_prepare_win_config(struct decon_device *decon,
 			dpu_translate_fmt_to_dpp(regs->dpp_config[i].format);
 	}
 
-	if (atomic_read(&decon->win_config)) {
-		struct fb_info *fbinfo = decon->win[decon->dt.dft_win]->fbinfo;
-		struct fb_event v = {0, };
-		int blank = FB_BLANK_UNBLANK;
-
-		v.info = fbinfo;
-		v.data = &blank;
+	if (decon->dt.out_type == DECON_OUT_DSI && atomic_read(&decon->ffu_flag)) {
 		if (regs->num_of_window) {
-			atomic_set(&decon->win_config, 0);
-			decon_notifier_call_chain(DECON_EVENT_FRAME, &v);
+			atomic_dec(&decon->ffu_flag);
+			decon_simple_notifier_call_chain(DECON_EVENT_FRAME, FB_BLANK_UNBLANK);
 		}
 	}
 
@@ -2122,8 +2124,6 @@ int decon_release(struct fb_info *info, int user)
 	struct decon_win *win = info->par;
 	struct decon_device *decon = win->decon;
 	int fb_count = atomic_read(&info->count);
-	struct fb_event v = {0, };
-	int blank = FB_BLANK_POWERDOWN;
 
 	decon_info("%s +\n", __func__);
 
@@ -2142,12 +2142,9 @@ int decon_release(struct fb_info *info, int user)
 		decon_hiber_block_exit(decon);
 		/* Unused DECON state is DECON_STATE_INIT */
 		if (decon->state == DECON_STATE_ON) {
-			v.info = info;
-			v.data = &blank;
-
-			decon_notifier_call_chain(FB_EARLY_EVENT_BLANK, &v);
+			decon_simple_notifier_call_chain(FB_EARLY_EVENT_BLANK, FB_BLANK_POWERDOWN);
 			decon_disable(decon);
-			decon_notifier_call_chain(FB_EVENT_BLANK, &v);
+			decon_simple_notifier_call_chain(FB_EVENT_BLANK, FB_BLANK_POWERDOWN);
 		}
 
 		decon_hiber_unblock(decon);
@@ -3065,8 +3062,6 @@ static void decon_shutdown(struct platform_device *pdev)
 {
 	struct decon_device *decon = platform_get_drvdata(pdev);
 	struct fb_info *fbinfo = decon->win[decon->dt.dft_win]->fbinfo;
-	struct fb_event v = {0, };
-	int blank = FB_BLANK_POWERDOWN;
 
 	decon_info("%s + state:%d\n", __func__, decon->state);
 	decon_enter_shutdown(decon);
@@ -3084,12 +3079,9 @@ static void decon_shutdown(struct platform_device *pdev)
 	decon_hiber_block_exit(decon);
 	/* Unused DECON state is DECON_STATE_INIT */
 	if (decon->state == DECON_STATE_ON) {
-		v.info = fbinfo;
-		v.data = &blank;
-
-		decon_notifier_call_chain(FB_EARLY_EVENT_BLANK, &v);
+		decon_simple_notifier_call_chain(FB_EARLY_EVENT_BLANK, FB_BLANK_POWERDOWN);
 		decon_disable(decon);
-		decon_notifier_call_chain(FB_EVENT_BLANK, &v);
+		decon_simple_notifier_call_chain(FB_EVENT_BLANK, FB_BLANK_POWERDOWN);
 	}
 
 	unlock_fb_info(fbinfo);

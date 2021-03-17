@@ -712,7 +712,6 @@ int himax_common_proc_init(void)
 	return 0;
 #ifdef HX_SMART_WAKEUP
 #ifdef HX_P_SENSOR
-	remove_proc_entry(HIMAX_PROC_PSENSOR_FILE, himax_touch_proc_dir);
 fail_5:
 #endif
 	remove_proc_entry(HIMAX_PROC_GESTURE_FILE, himax_touch_proc_dir);
@@ -1321,51 +1320,91 @@ int himax_report_data_init(void)
 #endif
 	return NO_ERR;
 mem_alloc_fail:
+	if(g_target_report_data != NULL) {
 #if defined(HX_PEN_FUNC_EN)
-	kfree(g_target_report_data->p_on);
-	g_target_report_data->p_on = NULL;
-	kfree(g_target_report_data->p_tilt_y);
-	g_target_report_data->p_tilt_y = NULL;
-	kfree(g_target_report_data->p_btn2);
-	g_target_report_data->p_btn2 = NULL;
-	kfree(g_target_report_data->p_btn);
-	g_target_report_data->p_btn = NULL;
-	kfree(g_target_report_data->p_tilt_x);
-	g_target_report_data->p_tilt_x = NULL;
-	kfree(g_target_report_data->p_hover);
-	g_target_report_data->p_hover = NULL;
-	kfree(g_target_report_data->pen_id);
-	g_target_report_data->pen_id = NULL;
-	kfree(g_target_report_data->p_w);
-	g_target_report_data->p_w = NULL;
-	kfree(g_target_report_data->p_y);
-	g_target_report_data->p_y = NULL;
-	kfree(g_target_report_data->p_x);
-	g_target_report_data->p_x = NULL;
+		if (g_target_report_data->p_on != NULL) {
+			kfree(g_target_report_data->p_on);
+			g_target_report_data->p_on = NULL;
+		}
+		if (g_target_report_data->p_tilt_y != NULL) {
+			kfree(g_target_report_data->p_tilt_y);
+			g_target_report_data->p_tilt_y = NULL;
+		}
+		if (g_target_report_data->p_btn2 != NULL) {
+			kfree(g_target_report_data->p_btn2);
+			g_target_report_data->p_btn2 = NULL;
+		}
+		if (g_target_report_data->p_btn != NULL) {
+			kfree(g_target_report_data->p_btn);
+			g_target_report_data->p_btn = NULL;
+		}
+		if (g_target_report_data->p_tilt_x != NULL) {
+			kfree(g_target_report_data->p_tilt_x);
+			g_target_report_data->p_tilt_x = NULL;
+		}
+		if (g_target_report_data->p_hover != NULL) {
+			kfree(g_target_report_data->p_hover);
+			g_target_report_data->p_hover = NULL;
+		}
+		if (g_target_report_data->pen_id != NULL) {
+			kfree(g_target_report_data->pen_id);
+			g_target_report_data->pen_id = NULL;
+		}
+		if (g_target_report_data->p_w != NULL) {
+			kfree(g_target_report_data->p_w);
+			g_target_report_data->p_w = NULL;
+		}
+		if (g_target_report_data->p_y != NULL) {
+			kfree(g_target_report_data->p_y);
+			g_target_report_data->p_y = NULL;
+		}
+		if (g_target_report_data->p_x != NULL) {
+			kfree(g_target_report_data->p_x);
+			g_target_report_data->p_x = NULL;
+		}
 #endif
-	kfree(g_target_report_data->finger_id);
-	g_target_report_data->finger_id = NULL;
-	kfree(g_target_report_data->w);
-	g_target_report_data->w = NULL;
-	kfree(g_target_report_data->y);
-	g_target_report_data->y = NULL;
-	kfree(g_target_report_data->x);
-	g_target_report_data->x = NULL;
-	kfree(g_target_report_data->mv_cnt);
-	g_target_report_data->mv_cnt = NULL;
-	kfree(g_target_report_data);
-	g_target_report_data = NULL;
+		if (g_target_report_data->finger_id != NULL) {
+			kfree(g_target_report_data->finger_id);
+			g_target_report_data->finger_id = NULL;
+		}
+		if (g_target_report_data->w != NULL) {
+			kfree(g_target_report_data->w);
+			g_target_report_data->w = NULL;
+		}
+		if (g_target_report_data->y != NULL) {
+			kfree(g_target_report_data->y);
+			g_target_report_data->y = NULL;
+		}
+		if (g_target_report_data->x != NULL) {
+			kfree(g_target_report_data->x);
+			g_target_report_data->x = NULL;
+		}
+		if (g_target_report_data->mv_cnt != NULL) {
+			kfree(g_target_report_data->mv_cnt);
+			g_target_report_data->mv_cnt = NULL;
+		}
+		kfree(g_target_report_data);
+		g_target_report_data = NULL;
+	}
 
 #if defined(HX_SMART_WAKEUP)
-	kfree(wake_event_buffer);
-	wake_event_buffer = NULL;
-	kfree(hx_touch_data->hx_event_buf);
-	hx_touch_data->hx_event_buf = NULL;
+	if (wake_event_buffer != NULL) {
+		kfree(wake_event_buffer);
+		wake_event_buffer = NULL;
+	}
+	if (hx_touch_data->hx_event_buf != NULL) {
+		kfree(hx_touch_data->hx_event_buf);
+		hx_touch_data->hx_event_buf = NULL;
+	}
 #endif
-	kfree(hx_touch_data->hx_rawdata_buf);
-	hx_touch_data->hx_rawdata_buf = NULL;
-	kfree(hx_touch_data->hx_coord_buf);
-	hx_touch_data->hx_coord_buf = NULL;
+	if (hx_touch_data->hx_rawdata_buf != NULL) {
+		kfree(hx_touch_data->hx_rawdata_buf);
+		hx_touch_data->hx_rawdata_buf = NULL;
+	}
+	if (hx_touch_data->hx_coord_buf != NULL) {
+		kfree(hx_touch_data->hx_coord_buf);
+		hx_touch_data->hx_coord_buf = NULL;
+	}
 
 	I("%s: Memory allocate fail!\n", __func__);
 	return MEM_ALLOC_FAIL;
@@ -1457,19 +1496,21 @@ void location_detect(struct himax_ts_data *ts, char *loc, int x, int y)
 {
 	memset(loc, 0, 4);
 
-	if (x < ts->pdata->area_edge)
-		strncat(loc, "E.", 2);
-	else if (x < (ts->pdata->screenWidth - ts->pdata->area_edge))
-		strncat(loc, "C.", 2);
-	else
-		strncat(loc, "e.", 2);
+	if (ts->pdata) {
+		if (x < ts->pdata->area_edge)
+			strncat(loc, "E.", 2);
+		else if (x < (ts->pdata->screenWidth - ts->pdata->area_edge))
+			strncat(loc, "C.", 2);
+		else
+			strncat(loc, "e.", 2);
 
-	if (y < ts->pdata->area_indicator)
-		strncat(loc, "S", 1);
-	else if (y < (ts->pdata->screenHeight - ts->pdata->area_navigation))
-		strncat(loc, "C", 1);
-	else
-		strncat(loc, "N", 1);
+		if (y < ts->pdata->area_indicator)
+			strncat(loc, "S", 1);
+		else if (y < (ts->pdata->screenHeight - ts->pdata->area_navigation))
+			strncat(loc, "C", 1);
+		else
+			strncat(loc, "N", 1);
+	}
 }
 
 void hx_log_touch_event(struct himax_ts_data *ts)
@@ -3129,10 +3170,11 @@ err_0f_update_wq_failed:
 err_update_wq_failed:
 #endif
 error_ic_detect_failed:
-	himax_gpio_power_deconfig(pdata);
+err_pinctrl:
 #ifndef CONFIG_OF
 err_power_failed:
 #endif
+	himax_gpio_power_deconfig(pdata);
 err_alloc_dt_pdata_failed:
 	kfree(hx_touch_data);
 	hx_touch_data = NULL;
@@ -3142,7 +3184,6 @@ err_alloc_touch_data_failed:
 err_dt_ic_data_fail:
 	kfree(pdata);
 	pdata = NULL;
-err_pinctrl:
 err_dt_platform_data_fail:
 	devm_kfree(ts->dev, ts->xfer_buff);
 	ts->xfer_buff = NULL;

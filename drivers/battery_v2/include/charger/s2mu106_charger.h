@@ -100,6 +100,7 @@
 
 #define CHARGER_OFF_MODE	0
 #define BUCK_MODE		1
+#define BST_MODE		2
 #define CHG_MODE		3
 #define OTG_BST_MODE		6
 
@@ -368,6 +369,7 @@ struct s2mu106_charger_data {
 	int irq_chg;
 	int irq_chgin;
 	int irq_chg_fault;
+	int irq_tx;
 	int irq_otg;
 	int irq_vbus;
 	int irq_rst;
@@ -389,6 +391,7 @@ struct s2mu106_charger_data {
 #if defined(CONFIG_MUIC_NOTIFIER)
 	struct notifier_block cable_check;
 #endif
+	struct mutex regmode_mutex;
 };
 
 #endif /*S2MU106_CHARGER_H*/

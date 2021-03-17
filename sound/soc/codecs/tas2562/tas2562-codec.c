@@ -95,11 +95,13 @@ static unsigned int p_tas2562_classh_d_data[] = {
 static unsigned int tas2562_codec_read(struct snd_soc_codec *codec,
 		unsigned int reg)
 {
+	unsigned int value = 0;
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_dbg(p_tas2562->dev, "Should not get here\n");
+	p_tas2562->read (p_tas2562, channel_left, reg, &value);
+	dev_dbg(p_tas2562->dev, "%s, reg=%d, value=%d", __func__, reg, value);
 
-	return 0;
+	return value;
 }
 
 static int tas2562_iv_enable(struct tas2562_priv *p_tas2562, int enable)
@@ -188,7 +190,7 @@ static int tas2562iv_get(struct snd_kcontrol *kcontrol,
 	}
 
 	tas2562iv_enable = ucontrol->value.integer.value[0];
-	dev_err(p_tas2562->dev, "value: 0x%x, tas2562iv_enable %d\n",
+	dev_info(p_tas2562->dev, "value: 0x%x, tas2562iv_enable %d\n",
 			value, tas2562iv_enable);
 
 	return 0;
@@ -204,7 +206,8 @@ static int tas2562_codec_write(struct snd_soc_codec *codec, unsigned int reg,
 {
 	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
 
-	dev_dbg(p_tas2562->dev, "Should not get here\n");
+	dev_dbg(p_tas2562->dev, "%s: %d, %d", __func__, reg, value);
+	p_tas2562->write (p_tas2562, channel_both, reg, value);
 
 	return 0;
 }
@@ -305,7 +308,7 @@ static int tas2562_set_power_state(struct tas2562_priv *p_tas2562,
 
 	if ((p_tas2562->mb_mute) && (state == TAS2562_POWER_ACTIVE))
 		state = TAS2562_POWER_MUTE;
-	dev_err(p_tas2562->dev, "set power state: %d\n", state);
+	dev_info(p_tas2562->dev, "set power state: %d\n", state);
 
 	switch (state) {
 	case TAS2562_POWER_ACTIVE:
@@ -1056,7 +1059,7 @@ static int tas2562_codec_probe(struct snd_soc_codec *codec)
 
 	tas2562_load_init(p_tas2562);
 	tas2562_iv_enable(p_tas2562, 1);
-	dev_err(p_tas2562->dev, "%s\n", __func__);
+	dev_dbg(p_tas2562->dev, "%s\n", __func__);
 
 	return 0;
 }
@@ -1074,9 +1077,45 @@ static const struct soc_enum spk_enum[] = {
 	speaker_switch_text),
 };
 
+static const char * const icn_sw_text[] = {"Enable", "Disable"};
+static const struct soc_enum icn_sw_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(icn_sw_text),
+	icn_sw_text),
+};
+static int tas2562_get_icn_switch(struct snd_kcontrol *pKcontrol,
+				struct snd_ctl_elem_value *p_u_control)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(pKcontrol);
+	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	dev_info(p_tas2562->dev, "%s, icn_sw = %ld\n",
+			__func__, p_u_control->value.integer.value[0]);
+	p_u_control->value.integer.value[0] = p_tas2562->icn_sw;
+	return 0;
+}
+static int tas2562_set_icn_switch(struct snd_kcontrol *pKcontrol,
+				struct snd_ctl_elem_value *p_u_control)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(pKcontrol);
+	struct tas2562_priv *p_tas2562 = snd_soc_codec_get_drvdata(codec);
+	p_tas2562->icn_sw = p_u_control->value.integer.value[0];
+        if (p_tas2562->icn_sw == 0) {
+		p_tas2562->update_bits(p_tas2562, channel_both,
+			TAS2562_ICN_SW_REG,
+			TAS2562_ICN_SW_MASK,
+			TAS2562_ICN_SW_ENABLE);
+		dev_info(p_tas2562->dev, "%s: ICN Enable!\n", __func__);
+        } else {
+		p_tas2562->update_bits(p_tas2562, channel_both,
+			TAS2562_ICN_SW_REG,
+			TAS2562_ICN_SW_MASK,
+			TAS2562_ICN_SW_DISABLE);
+		dev_info(p_tas2562->dev, "%s: ICN Disable!\n", __func__);
+        }
+	return 0;
+}
 static const struct snd_kcontrol_new tas2562_snd_controls[] = {
 	SOC_SINGLE_TLV("Amp Output Level", TAS2562_PLAYBACKCONFIGURATIONREG0,
-		0, 0x16, 0,
+		1, 0x16, 0,
 		tas2562_digital_tlv),
 	SOC_SINGLE_EXT("SmartPA System Mute", SND_SOC_NOPM, 0, 0x0001, 0,
 			tas2562_system_mute_ctrl_get, tas2562_system_mute_ctrl_put),
@@ -1088,6 +1127,9 @@ static const struct snd_kcontrol_new tas2562_snd_controls[] = {
 	SOC_ENUM_EXT("TAS2562 Right Speaker Switch", spk_enum[0],
 			tas2562_get_right_speaker_switch,
 			tas2562_set_right_speaker_switch),
+	SOC_ENUM_EXT("TAS2562 ICN Switch", icn_sw_enum[0],
+			tas2562_get_icn_switch,
+			tas2562_set_icn_switch),
 };
 
 static struct snd_soc_codec_driver soc_codec_driver_tas2562 = {

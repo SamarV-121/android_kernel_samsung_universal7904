@@ -273,6 +273,11 @@ typedef enum {
 	Error_Recovery			= 0xFF
 } policy_state;
 
+enum usbpd_manager_support {
+	MANAGER_SUPPORT,
+	MANAGER_NOT_SUPPORT,
+};
+
 typedef enum usbpd_manager_command {
 	MANAGER_REQ_GET_SNKCAP			= 1,
 	MANAGER_REQ_GOTOMIN			= 1 << 2,
@@ -598,6 +603,7 @@ struct usbpd_data {
 	int					specification_revision;
 	struct mutex		accept_mutex;
 
+	struct power_supply *psy_muic;
 	struct timeval		time1;
 	struct timeval		time2;
 };

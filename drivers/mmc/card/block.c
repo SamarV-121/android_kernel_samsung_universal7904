@@ -55,6 +55,9 @@
 #include "queue.h"
 #include "../host/dw_mmc.h"
 #include "../host/dw_mmc-exynos.h"
+#if defined(CONFIG_SEC_ABC)  
+#include <linux/sti/abc_common.h>
+#endif
 
 #ifdef CONFIG_MMC_SUPPORT_STLOG
 #include <linux/fslog.h>
@@ -1840,6 +1843,13 @@ void mmc_cmdq_error_logging(struct mmc_card *card,
 			err_log[index].cq_cnt++;
 		if (status & RPMB_SWITCH_ERR)
 			err_log[index].rpmb_cnt++;
+		if (status & CQ_HW_RST) {
+			err_log[index].hw_rst_cnt++;
+#if defined(CONFIG_SEC_ABC) 
+			if ((err_log[index].hw_rst_cnt % 20) == 0)
+				sec_abc_send_event("MODULE=storage@ERROR=mmc_hwreset_err");
+#endif
+		}
 	}
 
 	if (!cqrq)
@@ -3580,6 +3590,7 @@ reset:
 	mmc_hw_reset(host);
 	host->cmdq_ops->reset(host, true);
 	clear_bit(CMDQ_STATE_HALT, &host->cmdq_ctx.curr_state);
+	mmc_cmdq_error_logging(host->card, NULL, CQ_HW_RST);
 }
 
 static void mmc_blk_cmdq_shutdown(struct mmc_queue *mq)
@@ -3700,6 +3711,9 @@ static void mmc_blk_cmdq_err(struct mmc_queue *mq)
 		    R1_CURRENT_STATE(status) == R1_STATE_RCV) {
 			err =  send_stop(card, MMC_CMDQ_STOP_TIMEOUT_MS,
 					 mrq->req, &gen_err, &status);
+
+			mmc_cmdq_error_logging(host->card, mrq->cmdq_req, status);
+
 			if (err) {
 				pr_err("%s: error %d sending stop (%d) command\n",
 					mrq->req->rq_disk->disk_name,
