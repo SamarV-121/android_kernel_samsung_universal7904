@@ -140,13 +140,13 @@ static int himax_mcu_flash_write_burst_lenth(uint8_t *reg_byte, uint8_t *write_d
 
 static int himax_mcu_register_write(uint8_t *write_addr, uint32_t write_length, uint8_t *write_data, uint8_t cfg_flag)
 {
-	int address;
+	unsigned int address;
 	uint8_t tmp_addr[4];
 	uint8_t *tmp_data;
-	int total_read_times = 0;
+	unsigned int total_read_times = 0;
 	uint32_t max_bus_size = MAX_I2C_TRANS_SZ;
 	uint32_t total_size_temp = 0;
-	int i = 0;
+	unsigned int i = 0;
 
 	/*I("%s,Entering\n", __func__);*/
 	if (cfg_flag == 0) {
@@ -1963,7 +1963,7 @@ static bool himax_mcu_sram_verify(uint8_t *FW_File, int FW_Size)
 
 static bool himax_mcu_get_DSRAM_data(uint8_t *info_data, bool DSRAM_Flag)
 {
-	int i = 0;
+	unsigned int i = 0;
 	unsigned char tmp_addr[ADDR_LEN_4];
 	unsigned char tmp_data[DATA_LEN_4];
 	uint8_t max_i2c_size = MAX_I2C_TRANS_SZ;
@@ -2384,7 +2384,7 @@ static int hx_read_guest_info(void)
 	/* uint32_t temp_addr = 0; */
 	uint8_t temp_str[128];
 	int i = 0;
-	int custom_info_temp = 0;
+	unsigned int custom_info_temp = 0;
 	int checksum = 0;
 
 	himax_guest_info_set_status(1);

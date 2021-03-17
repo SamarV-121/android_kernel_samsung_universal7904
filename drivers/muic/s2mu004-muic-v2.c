@@ -3066,12 +3066,10 @@ static int s2mu004_muic_probe(struct platform_device *pdev)
 	fb_register_client(&muic_data->fb_notifier);
 #endif
 
-#if defined(CONFIG_MUIC_SUPPORT_POWERMETER)
 	ret = muic_manager_psy_init(muic_if, &pdev->dev);
 	if (ret) {
 		pr_err("%s failed to init psy(%d)\n", __func__, ret);
 	}
-#endif
 
 	ret = s2mu004_muic_irq_init(muic_data);
 	if (ret) {

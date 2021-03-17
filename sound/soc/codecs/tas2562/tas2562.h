@@ -524,8 +524,13 @@ TAS2562_INTERRUPTCONFIGURATION_PININTCONFIG10_ASSERT2MSONLATCHEDINTERRUPTS \
 #define TAS2562_VBATFILTER TAS2562_REG(0x0, 0x0, 0x3b)
 #define TAS2562_CLASSHRELEASETIMER TAS2562_REG(0x0, 0x0, 0x3c)
 
-#define TAS2562_ICN_REG TAS2562_REG(0x0, 0x2, 0x64)
+#define TAS2562_ICN_THRESHOLD_REG TAS2562_REG(0x0, 0x2, 0x64)
+#define TAS2562_ICN_HYSTERESIS_REG TAS2562_REG(0x0, 0x2, 0x6c)
 
+#define TAS2562_ICN_SW_REG TAS2562_REG(0x0, 0x0, 0x3e)
+#define TAS2562_ICN_SW_MASK (0x01 << 4)
+#define TAS2562_ICN_SW_ENABLE  (0x10)
+#define TAS2562_ICN_SW_DISABLE  (0x00)
 #define TAS2562_TESTPAGECONFIGURATION TAS2562_REG(0x0, 0xfd, 0xd)
 #define TAS2562_CLASSDCONFIGURATION1	TAS2562_REG(0x0, 0xfd, 0x19)
 #define TAS2562_CLASSDCONFIGURATION2	TAS2562_REG(0x0, 0xfd, 0x32)
@@ -626,6 +631,7 @@ bool i2c_suspend;
 int mn_channels;
 int spk_l_control;
 int spk_r_control;
+int icn_sw;
 int (*read)(struct tas2562_priv *p_tas2562, enum channel chn,
 	unsigned int reg, unsigned int *pValue);
 int (*write)(struct tas2562_priv *p_tas2562, enum channel chn,

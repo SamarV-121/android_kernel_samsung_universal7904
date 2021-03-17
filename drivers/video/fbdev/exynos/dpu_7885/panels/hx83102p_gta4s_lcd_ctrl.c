@@ -42,6 +42,7 @@ struct lcd_info {
 	unsigned int			connected;
 	unsigned int			brightness;
 	unsigned int			state;
+	unsigned int			cabc_check;
 
 	struct lcd_device		*ld;
 	struct backlight_device		*bd;
@@ -139,6 +140,17 @@ static int dsim_panel_set_brightness(struct lcd_info *lcd, int force)
 	dev_info(&lcd->ld->dev, "%s: brightness: %3d, %4d(%2x %2x), lx: %d\n", __func__,
 		lcd->brightness, brightness_table[lcd->brightness], bl_reg[1], bl_reg[2], lcd->lux);
 
+	if (lcd->brightness < 70 && lcd->cabc_check) {
+		DSI_WRITE(SEQ_SET_B9_PW, ARRAY_SIZE(SEQ_SET_B9_PW));
+		DSI_WRITE(SEQ_SET_HX83102P_CABC_OFF, ARRAY_SIZE(SEQ_SET_HX83102P_CABC_OFF));
+		DSI_WRITE(SEQ_SET_B9_CLOSE_PW, ARRAY_SIZE(SEQ_SET_B9_CLOSE_PW));
+		lcd->cabc_check = 0;
+	} else if (lcd->brightness >= 70 && !lcd->cabc_check) {
+		DSI_WRITE(SEQ_SET_B9_PW, ARRAY_SIZE(SEQ_SET_B9_PW));
+		DSI_WRITE(SEQ_SET_HX83102P_CABC_ON, ARRAY_SIZE(SEQ_SET_HX83102P_CABC_ON));
+		DSI_WRITE(SEQ_SET_B9_CLOSE_PW, ARRAY_SIZE(SEQ_SET_B9_CLOSE_PW));
+		lcd->cabc_check = 1;
+	}
 exit:
 	mutex_unlock(&lcd->lock);
 
@@ -258,7 +270,7 @@ static int hx83102p_init(struct lcd_info *lcd)
 	int ret = 0;
 
 	dev_info(&lcd->ld->dev, "%s: ++\n", __func__);
-
+	lcd->cabc_check = 1;
 #if defined(CONFIG_SEC_FACTORY)
 	hx83102p_read_id(lcd);
 #endif

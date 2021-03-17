@@ -2382,7 +2382,7 @@ int fimc_is_sensor_peri_actuator_softlanding(struct fimc_is_device_sensor_peri *
 		actuator_itf->hw_pos = soft_landing_table->hw_table[i];
 
 		/* The actuator needs a delay time when lens moving for soft landing. */
-		mdelay(soft_landing_table->step_delay);
+		msleep(soft_landing_table->step_delay);
 
 		ret = fimc_is_sensor_peri_actuator_check_move_done(device);
 		if (ret) {
