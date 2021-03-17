@@ -857,9 +857,6 @@ static struct platform_device *of_find_device_by_path(const char *name)
 		return NULL;
 	}
 
-	if (pdev)
-		platform_device_put(pdev);
-
 	return pdev;
 }
 
@@ -914,6 +911,12 @@ int of_update_phandle_property_list(struct device_node *from, const char *phandl
 		.buf = print_buf,
 		.size = sizeof(print_buf) - 1,
 	};
+
+	if (!phandle_name) {
+		dbg_info("phandle_name is invalid\n");
+		ret = -EINVAL;
+		goto exit;
+	}
 
 	while (node_names[count]) {
 		count++;
@@ -1029,11 +1032,15 @@ int of_update_phandle_property(struct device_node *from, const char *phandle_nam
 {
 	const char *node_names[2] = { NULL, NULL };
 
-	if (!phandle_name)
+	if (!phandle_name) {
 		dbg_info("phandle_name is invalid\n");
+		return -EINVAL;
+	}
 
-	if (!node_name)
+	if (!node_name) {
 		dbg_info("node_name is invalid\n");
+		return -EINVAL;
+	}
 
 	node_names[0] = node_name;
 

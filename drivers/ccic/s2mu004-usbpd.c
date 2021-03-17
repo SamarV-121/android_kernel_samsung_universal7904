@@ -937,7 +937,19 @@ static int  s2mu004_op_mode_clear(void *_data)
 }
 static int s2mu004_vbus_on_check(void *_data)
 {
-	return true;
+	struct usbpd_data *data = (struct usbpd_data *) _data;
+	union power_supply_propval value;
+
+	if (!data->psy_muic) {
+		data->psy_muic = get_power_supply_by_name("muic-manager");
+		if (!data->psy_muic) {
+			pr_info("%s, fail to get psy_muic\n", __func__);
+			return true;
+		}
+	}
+
+	data->psy_muic->desc->get_property(data->psy_muic, POWER_SUPPLY_PROP_VBUS, &value);
+	return value.intval;
 }
 
 #if defined(CONFIG_CHECK_CTYPE_SIDE) || defined(CONFIG_CCIC_SYSFS)

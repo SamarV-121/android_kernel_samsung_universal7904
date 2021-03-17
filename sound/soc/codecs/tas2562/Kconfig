@@ -1,7 +1,7 @@
 
 config TAS2562_REGMAP
     bool "Use of RegMap API"
-	depends on SND_SOC_TAS2562
+    depends on SND_SOC_TAS2562
     help
       Enable support for TAS2562 regmap driver.
       This includes i2c i2c driver structure,
@@ -10,21 +10,21 @@ config TAS2562_REGMAP
 
 config TAS2562_CODEC
     bool "Codec Driver support"
-	depends on SND_SOC_TAS2562
+    depends on SND_SOC_TAS2562
     help
       Enable support for TAS2562 codec driver.
       This includes codec driver interfaces
       and functions.
 
 config PLATFORM_EXYNOS
-    bool "Exyons platform support"
-    default y
+    bool "Exynos platform support"
+    depends on SND_SOC_TAS2562
     help
-      Enable support for Exyons platformt.
+      Enable support for Exynos platform.
 
 config TAS25XX_ALGO
     bool "TAS2562 Calibration Support"
-	depends on SND_SOC_TAS2562
+    depends on SND_SOC_TAS2562
     help 
       Enable support for TAS25xx Calibration driver.
       This includes TAS2562 Calibration driver interfaces
