@@ -89,14 +89,17 @@ static int afe_smartamp_get_set(u8 *user_data, uint32_t param_id,
 
 	switch (get_set) {
 		case TAS_SET_PARAM:
-			ret = ti_smartpa_write((void*)user_data, param_id, length);
+		    memcpy(resp_data.payload,user_data,length);
+			ret = ti_smartpa_write((void*)&resp_data, param_id, length);
 			break;
 		case TAS_GET_PARAM:
 			memset(&resp_data, 0, sizeof(resp_data));
 
 			ret = ti_smartpa_read((void*)&resp_data, param_id, length);
 
-			memcpy(user_data, resp_data.payload, length);
+			if (ret == 0)
+				memcpy(user_data, resp_data.payload, length);
+
 			break;
 		default:
 			goto fail_cmd;
@@ -136,7 +139,7 @@ static int tas25xx_get_efs_data(uint32_t *data, uint8_t rdc_temp_l_r)
 {
 	struct file *pf = NULL;
 	char fname[MAX_STRING] = {0};
-	loff_t pos = 0; 	
+	loff_t pos = 0;
 	char calib_data[MAX_STRING] = {0};
 	uint32_t data_flt[2];
 	mm_segment_t fs;
@@ -150,16 +153,16 @@ static int tas25xx_get_efs_data(uint32_t *data, uint8_t rdc_temp_l_r)
 
 	fs = get_fs();
 	set_fs(get_ds());
-	
+
 	if(rdc_temp_l_r == TEMP_L)
-		memcpy(fname, TAS25XX_EFS_TEMP_DATA_L, sizeof(TAS25XX_EFS_TEMP_DATA_L));	
+		memcpy(fname, TAS25XX_EFS_TEMP_DATA_L, sizeof(TAS25XX_EFS_TEMP_DATA_L));
 	else if(rdc_temp_l_r == RDC_L)
 		memcpy(fname, TAS25XX_EFS_CALIB_DATA_L, sizeof(TAS25XX_EFS_CALIB_DATA_L));
 	else if(rdc_temp_l_r == TEMP_R)
 		memcpy(fname, TAS25XX_EFS_TEMP_DATA_R, sizeof(TAS25XX_EFS_TEMP_DATA_R));
 	else if(rdc_temp_l_r == RDC_R)
 		memcpy(fname, TAS25XX_EFS_CALIB_DATA_R, sizeof(TAS25XX_EFS_CALIB_DATA_R));
-	
+
 	pf = filp_open(fname, O_RDONLY, 0666);
 
 	if(!IS_ERR(pf))
@@ -171,7 +174,7 @@ static int tas25xx_get_efs_data(uint32_t *data, uint8_t rdc_temp_l_r)
 			if(ret != 1)
 			{
 				pr_err("[TI-SmartPA:%s] file %s read error\n", __func__, fname);
-				ret = -1;				
+				ret = -1;
 			}
 		}
 		else
@@ -180,7 +183,7 @@ static int tas25xx_get_efs_data(uint32_t *data, uint8_t rdc_temp_l_r)
 			if(ret != 2)
 			{
 				pr_err("[TI-SmartPA:%s] file %s read error\n", __func__, fname);
-				ret = -1;				
+				ret = -1;
 			}
 			*data = TRANSF_USER_TO_IMPED(data_flt[0], data_flt[1]);
 		}
@@ -220,23 +223,23 @@ void tas25xx_update_big_data(void)
 			pr_err("[TI-SmartPA:%s] Failed to get Excursion and Temperature Stats", __func__);
 		}
 		else
-		{			
+		{
 			pr_err("[TI-SmartPA:%s] Emax[%d] %d(%d.%d), Tmax[%d] %d, EOcount[%d] %d, TOcount[%d] %d \n",
-						__func__, iter, data[0], (int32_t)trans_val_to_user_i(data[0], QFORMAT31), 
+						__func__, iter, data[0], (int32_t)trans_val_to_user_i(data[0], QFORMAT31),
 						(int32_t)trans_val_to_user_m(data[0], QFORMAT31),
 						iter, data[1], iter, data[2], iter, data[3]);
 
-			/*Update Excursion Data*/ 
-			p_tas25xx_algo->b_data[iter].exc_max = 
+			/*Update Excursion Data*/
+			p_tas25xx_algo->b_data[iter].exc_max =
 				(data[0] > p_tas25xx_algo->b_data[iter].exc_max) ? data[0]:p_tas25xx_algo->b_data[iter].exc_max;
-			p_tas25xx_algo->b_data[iter].exc_max_persist = 
+			p_tas25xx_algo->b_data[iter].exc_max_persist =
 				(data[0] > p_tas25xx_algo->b_data[iter].exc_max_persist) ? data[0]:p_tas25xx_algo->b_data[iter].exc_max_persist;
-			p_tas25xx_algo->b_data[iter].exc_over_count += data[2];	
+			p_tas25xx_algo->b_data[iter].exc_over_count += data[2];
 
 			/*Update Temperature Data*/
-			p_tas25xx_algo->b_data[iter].temp_max = 
+			p_tas25xx_algo->b_data[iter].temp_max =
 				(data[1] > p_tas25xx_algo->b_data[iter].temp_max) ? data[1]:p_tas25xx_algo->b_data[iter].temp_max;
-			p_tas25xx_algo->b_data[iter].temp_max_persist = 
+			p_tas25xx_algo->b_data[iter].temp_max_persist =
 				(data[1] > p_tas25xx_algo->b_data[iter].temp_max_persist) ? data[1]:p_tas25xx_algo->b_data[iter].temp_max_persist;
 			p_tas25xx_algo->b_data[iter].temp_over_count += data[3];
 		}
@@ -251,13 +254,13 @@ void tas25xx_send_algo_calibration(void)
 	uint32_t param_id = 0;
 	uint8_t iter;
 	int32_t ret = 0;
-	
+
 	if(!p_tas25xx_algo)
 	{
 		pr_err("[TI-SmartPA:%s] memory not allocated yet for p_tas25xx_algo",
 			__func__);
 	}
-	
+
 	for(iter = 0; iter < p_tas25xx_algo->spk_count; iter++)
 	{
 		if(!(p_tas25xx_algo->calib_update[iter]))
@@ -269,20 +272,20 @@ void tas25xx_send_algo_calibration(void)
 			{
 				p_tas25xx_algo->calib_update[iter] = false;
 			}
-			
+
 			ret = tas25xx_get_efs_data(&amb_temp, TEMP_L + iter*2);
 			if(ret < 0)
 			{
 				p_tas25xx_algo->calib_update[iter] = false;
 			}
-			
+
 			if(p_tas25xx_algo->calib_update[iter])
 			{
 				p_tas25xx_algo->calib_re[iter] = calib_re;
 				p_tas25xx_algo->amb_temp[iter] = amb_temp;
 			}
 		}
-		
+
 		if(p_tas25xx_algo->calib_update[iter])
 		{
 			/*Set ambient temperature*/
@@ -302,18 +305,18 @@ void tas25xx_send_algo_calibration(void)
 static int tas25xx_save_calib_data(uint32_t *calib_rdc)
 {
 	uint8_t iter = 0;
-	
+
 	if(!calib_rdc)
 	{
 		pr_err("[TI-SmartPA:%s] argument is Null", __func__);
 		return -1;
 	}
-	
+
 	for(iter = 0; iter < p_tas25xx_algo->spk_count; iter++)
 	{
 		calib_re_hold[iter] = calib_rdc[iter];
 		amb_temp_hold[iter] = tas25xx_get_amb_temp();
-	}	
+	}
 	return 0;
 }
 
@@ -325,7 +328,7 @@ static void calib_work_routine(struct work_struct *work)
 	uint32_t param_id = 0;
 	uint32_t calib_re[MAX_CHANNELS] = {0};
 	int32_t ret = 0;
-	
+
 	/*Get Re*/
 	for(iter = 0; iter < p_tas25xx_algo->spk_count; iter++)
 	{
@@ -389,14 +392,14 @@ static ssize_t tas25xx_calib_calibration_store(struct device *dev,
 	uint32_t param_id = 0;
 	int32_t ret = 0;
 	int32_t start;
-	
+
 	ret = kstrtos32(buf, 10, &start);
 	if(ret)
 	{
 		pr_err("[TI-SmartPA:%s] Invalid input", __func__);
 		goto end;
 	}
-	
+
 	if(start)
 	{
 		//Init
@@ -412,9 +415,9 @@ static ssize_t tas25xx_calib_calibration_store(struct device *dev,
 				goto end;
 			}
 		}
-		
+
 		calibration_status = 1;
-	
+
 		/*Give time for algorithm to converge rdc*/
 		schedule_delayed_work(&p_tas25xx_algo->calib_work,
 				msecs_to_jiffies(CALIB_TIME * 1000));
@@ -442,14 +445,14 @@ static ssize_t tas25xx_calib_status_show(struct device *dev,
 		ret = sprintf(buf, "%d", calibration_result[1]);
 	else
 		ret = sprintf(buf, "%d", calibration_result[0]);
-	
+
 	return ret;
 }
 
 static ssize_t tas25xx_calib_rdc_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
-{	
+{
 	ssize_t ret;
 	uint32_t calib_re = 0;
 
@@ -465,7 +468,7 @@ static ssize_t tas25xx_calib_rdc_show(struct device *dev,
 		else
 			calib_re = calib_re_hold[1];
 
-		ret = sprintf(buf, "%02d.%02d", 
+		ret = sprintf(buf, "%02d.%02d",
 				(int32_t)trans_val_to_user_i(calib_re, QFORMAT19), (int32_t)trans_val_to_user_m(calib_re, QFORMAT19));
 	}
 	else
@@ -480,7 +483,7 @@ static ssize_t tas25xx_calib_rdc_show(struct device *dev,
 		else
 			calib_re = calib_re_hold[0];
 
-		ret = sprintf(buf, "%02d.%02d", 
+		ret = sprintf(buf, "%02d.%02d",
 				(int32_t)trans_val_to_user_i(calib_re, QFORMAT19), (int32_t)trans_val_to_user_m(calib_re, QFORMAT19));
 	}
 
@@ -490,7 +493,7 @@ static ssize_t tas25xx_calib_rdc_show(struct device *dev,
 static ssize_t tas25xx_amb_temp_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
-{	
+{
 	ssize_t ret;
 	uint32_t amb_temp = 0;
 
@@ -501,12 +504,12 @@ static ssize_t tas25xx_amb_temp_show(struct device *dev,
 			if(p_tas25xx_algo->calib_update[1])
 				amb_temp = p_tas25xx_algo->amb_temp[1];
 			else
-				tas25xx_get_efs_data(&amb_temp, TEMP_R);	
+				tas25xx_get_efs_data(&amb_temp, TEMP_R);
 		}
 		else
 			amb_temp = amb_temp_hold[1];
 
-		ret = sprintf(buf, "%d", amb_temp);	
+		ret = sprintf(buf, "%d", amb_temp);
 	}
 	else
 	{
@@ -515,24 +518,24 @@ static ssize_t tas25xx_amb_temp_show(struct device *dev,
 			if(p_tas25xx_algo->calib_update[0])
 				amb_temp = p_tas25xx_algo->amb_temp[0];
 			else
-				tas25xx_get_efs_data(&amb_temp, TEMP_L);	
+				tas25xx_get_efs_data(&amb_temp, TEMP_L);
 		}
 		else
 			amb_temp = amb_temp_hold[0];
 
-		ret = sprintf(buf, "%d", amb_temp);	
+		ret = sprintf(buf, "%d", amb_temp);
 	}
 
 	return ret;
 }
-								
+
 static struct attribute *tas25xx_calib_attr[] = {
 	&dev_attr_calibration.attr,
-	&dev_attr_cstatus.attr,	
+	&dev_attr_cstatus.attr,
 	&dev_attr_rdc.attr,
 	&dev_attr_temp.attr,
 };
-				
+
 static struct attribute *tas25xx_calib_attr_r[] = {
 	&dev_attr_cstatus_r.attr,
 	&dev_attr_rdc_r.attr,
@@ -557,7 +560,7 @@ static void valid_work_routine(struct work_struct *work)
 	uint32_t f0[MAX_CHANNELS] = {0};
 	uint32_t q[MAX_CHANNELS] = {0};
 	int32_t ret = 0;
-	
+
 	//Get F0,Q
 	for(iter = 0; iter < p_tas25xx_algo->spk_count; iter++)
 	{
@@ -593,15 +596,15 @@ static void valid_work_routine(struct work_struct *work)
 						validation_result[iter] = STATUS_SUCCESS;
 				}
 				pr_info("[TI-SmartPA:%s] Channel-%d", __func__, iter);
-				pr_info("[TI-SmartPA:%s]f0 is %d, valid range %d - %d\n",__func__, 
+				pr_info("[TI-SmartPA:%s]f0 is %d, valid range %d - %d\n",__func__,
 					(f0[iter] >> 19), (p_tas25xx_algo->f0_min[iter] >> 19), (p_tas25xx_algo->f0_max[iter] >> 19));
-				pr_info("[TI-SmartPA:%s]Q is %d.%d, valid range %d.%d - %d.%d \n",__func__, 
+				pr_info("[TI-SmartPA:%s]Q is %d.%d, valid range %d.%d - %d.%d \n",__func__,
 					(int32_t)trans_val_to_user_i(q[iter], QFORMAT19), (int32_t)trans_val_to_user_m(q[iter], QFORMAT19),
-					(int32_t)trans_val_to_user_i(p_tas25xx_algo->q_min[iter], QFORMAT19), 
+					(int32_t)trans_val_to_user_i(p_tas25xx_algo->q_min[iter], QFORMAT19),
 					(int32_t)trans_val_to_user_m(p_tas25xx_algo->q_min[iter], QFORMAT19),
-					(int32_t)trans_val_to_user_i(p_tas25xx_algo->q_max[iter], QFORMAT19), 
+					(int32_t)trans_val_to_user_i(p_tas25xx_algo->q_max[iter], QFORMAT19),
 					(int32_t)trans_val_to_user_m(p_tas25xx_algo->q_max[iter], QFORMAT19));
-				pr_info("[TI-SmartPA:%s] result: %s", __func__, 
+				pr_info("[TI-SmartPA:%s] result: %s", __func__,
 					validation_result[iter] == STATUS_SUCCESS ? "Success":"Fail");
 			}
 		}
@@ -622,17 +625,17 @@ static DEVICE_ATTR(status_r, 0644, tas25xx_valid_status_show,
 static ssize_t tas25xx_valid_validation_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t size)
-{	
+{
 	int32_t start = 0;
 	int32_t ret = 0;
-	
+
 	ret = kstrtos32(buf, 10, &start);
 	if(ret)
 	{
 		pr_err("[TI-SmartPA:%s] Invalid input", __func__);
 		goto end;
 	}
-	
+
 	if(start)
 	{
 		//Give time for algorithm to converge rdc
@@ -744,7 +747,7 @@ static ssize_t tas25xx_bd_exc_max_show(struct device *dev,
 			(int32_t)trans_val_to_user_m(p_tas25xx_algo->b_data[0].exc_max, QFORMAT31));
 		p_tas25xx_algo->b_data[0].exc_max = 0;
 	}
-	
+
 	return ret;
 }
 
@@ -833,7 +836,7 @@ static ssize_t tas25xx_bd_temp_over_count_show(struct device *dev,
 					char *buf)
 {
 	ssize_t ret;
-	
+
 	if(attr == &dev_attr_temp_over_count_r)
 	{
 		ret = sprintf(buf, "%d", p_tas25xx_algo->b_data[1].temp_over_count);
@@ -889,7 +892,7 @@ static void clean_up_tas_sysfs (void)
 		}
 
 		if (p_tas25xx_algo->bd_dev) {
-			sysfs_remove_group (&p_tas25xx_algo->bd_dev->kobj, &tas25xx_bd_attr_grp);	
+			sysfs_remove_group (&p_tas25xx_algo->bd_dev->kobj, &tas25xx_bd_attr_grp);
 			device_destroy (p_tas25xx_algo->algo_class, 1);
 		}
 
@@ -1027,7 +1030,7 @@ void smartamp_add_algo(uint8_t channels)
 	}
 
 	p_tas25xx_algo->spk_count = channels;
-	
+
 	memcpy(tas25xx_calib_attr_m, tas25xx_calib_attr, sizeof(tas25xx_calib_attr));
 	memcpy(tas25xx_valid_attr_m, tas25xx_valid_attr, sizeof(tas25xx_valid_attr));
 	memcpy(tas25xx_bd_attr_m, tas25xx_bd_attr, sizeof(tas25xx_bd_attr));
@@ -1040,7 +1043,7 @@ void smartamp_add_algo(uint8_t channels)
 		memcpy(tas25xx_bd_attr_m + ARRAY_SIZE(tas25xx_bd_attr),
 			tas25xx_bd_attr_r, sizeof(tas25xx_bd_attr_r));
 	}
-	
+
 	update_dts_info();
 
 	p_tas25xx_algo->algo_class = class_create(THIS_MODULE, TAS25XX_SYSFS_CLASS_NAME);
@@ -1064,7 +1067,7 @@ void smartamp_add_algo(uint8_t channels)
 		pr_err("[TI-SmartPA:%s]Failed to create sysfs group\n", __func__);
 		goto err_dev;
 	}
-	
+
 	INIT_DELAYED_WORK(&p_tas25xx_algo->calib_work, calib_work_routine);
 
 	p_tas25xx_algo->valid_dev = device_create(p_tas25xx_algo->algo_class, NULL, 1, NULL,
@@ -1082,7 +1085,7 @@ void smartamp_add_algo(uint8_t channels)
 		p_tas25xx_algo->valid_dev = NULL;
 		goto err_dev;
 	}
-	
+
 	INIT_DELAYED_WORK(&p_tas25xx_algo->valid_work, valid_work_routine);
 
 	p_tas25xx_algo->bd_dev = device_create(p_tas25xx_algo->algo_class, NULL, 1, NULL,

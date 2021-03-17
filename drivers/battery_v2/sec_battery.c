@@ -6817,7 +6817,7 @@ ssize_t sec_bat_store_attrs(
 	return ret;
 }
 
-#if defined (CONFIG_ENABLE_USB_SUSPEND_STATE)
+#if defined(CONFIG_ENABLE_USB_SUSPEND_STATE)
 static void sec_bat_do_suspend_resume(struct sec_battery_info * battery, int mode) {
 	/* 1: suspend mode, 100: unconfigured */
 	pr_info("%s: mode: %d, battery->usb_suspend_mode: %d, cable_type: %s\n",
@@ -6829,10 +6829,10 @@ static void sec_bat_do_suspend_resume(struct sec_battery_info * battery, int mod
 		if (battery->usb_suspend_mode != mode) {
 			if (mode == 1) {
 				pr_info("%s: usb suspend\n", __func__);
-				battery->usb_suspend_mode = 1;
+				battery->usb_suspend_mode = true;
 			} else {
 				pr_info("%s: usb unconfigured\n", __func__);
-				battery->usb_suspend_mode = 0;
+				battery->usb_suspend_mode = false;
 				sec_bat_set_charge(battery, SEC_BAT_CHG_MODE_CHARGING);
 			}
 			wake_lock(&battery->cable_wake_lock);
@@ -8136,6 +8136,9 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 		}
 
 		cmd = "PD_ATTACH";
+		/* Prevent PD Charge test fail */
+		battery->usb_suspend_mode = false;
+		
 		if ((*(struct pdic_notifier_struct *)usb_typec_info.pd).event == PDIC_NOTIFY_EVENT_CCIC_ATTACH) {
 			battery->pdic_info.sink_status.rp_currentlvl =
 				(*(struct pdic_notifier_struct *)usb_typec_info.pd).sink_status.rp_currentlvl;
@@ -8149,8 +8152,12 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 			mutex_unlock(&battery->typec_notylock);
 			return 0;
 		}
-		if ((*(struct pdic_notifier_struct *)usb_typec_info.pd).event == PDIC_NOTIFY_EVENT_PD_SINK_CAP)
+		if ((*(struct pdic_notifier_struct *)usb_typec_info.pd).event == PDIC_NOTIFY_EVENT_PD_SINK_CAP) {
 			battery->pdic_attach = false;
+#if defined(CONFIG_CHARGER_S2MU106)
+			battery->cable_type = SEC_BATTERY_CABLE_TA;
+#endif
+		}
 		if (!battery->pdic_attach) {
 			battery->pdic_info = *(struct pdic_notifier_struct *)usb_typec_info.pd;
 			battery->pd_list.now_pd_index = 0;

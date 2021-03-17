@@ -422,9 +422,14 @@ static int s5p_mfc_open(struct file *file)
 
 	/* Load firmware if this is the first instance */
 	if (dev->num_inst == 1) {
+		/* set watchdog timer */
 		dev->watchdog_timer.expires = jiffies +
 					msecs_to_jiffies(WATCHDOG_TICK_INTERVAL);
 		add_timer(&dev->watchdog_timer);
+
+		/* set MFC idle timer */
+		atomic_set(&dev->hw_run_cnt, 0);
+		mfc_change_idle_mode(dev, MFC_IDLE_MODE_NONE);
 
 		/* Load the FW */
 		if (!dev->fw.status) {
@@ -532,6 +537,7 @@ err_context_alloc:
 err_fw_load:
 err_fw_alloc:
 	del_timer_sync(&dev->watchdog_timer);
+	del_timer_sync(&dev->mfc_idle_timer);
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 	if (ctx->is_drm)
 		dev->num_drm_inst--;
@@ -669,6 +675,7 @@ static int s5p_mfc_release(struct file *file)
 	if (dev->num_inst == 0) {
 		s5p_mfc_deinit_hw(dev);
 		del_timer_sync(&dev->watchdog_timer);
+		del_timer_sync(&dev->mfc_idle_timer);
 
 		flush_workqueue(dev->butler_wq);
 
@@ -1161,6 +1168,19 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->watchdog_timer.data = (unsigned long)dev;
 	dev->watchdog_timer.function = s5p_mfc_watchdog_tick;
 
+
+	/* MFC timer for HW idle checking */
+	dev->mfc_idle_wq = create_singlethread_workqueue("mfc/idle");
+	if (!dev->mfc_idle_wq) {
+		dev_err(&pdev->dev, "failed to create workqueue for MFC QoS idle\n");
+		goto err_wq_idle;
+	}
+	INIT_WORK(&dev->mfc_idle_work, mfc_qos_idle_worker);
+	init_timer(&dev->mfc_idle_timer);
+	dev->mfc_idle_timer.data = (unsigned long)dev;
+	dev->mfc_idle_timer.function = mfc_idle_checker;
+	mutex_init(&dev->idle_qos_mutex);
+
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	INIT_LIST_HEAD(&dev->qos_queue);
 #endif
@@ -1222,6 +1242,8 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 #endif
 
+	mutex_init(&dev->qos_mutex);
+
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	atomic_set(&dev->qos_req_cur, 0);
 
@@ -1274,6 +1296,8 @@ err_ion_client:
 err_butler_wq:
 	vb2_ion_destroy_context(dev->alloc_ctx);
 alloc_ctx_fail:
+	destroy_workqueue(dev->mfc_idle_wq);
+err_wq_idle:
 	destroy_workqueue(dev->watchdog_wq);
 err_wq_watchdog:
 	video_unregister_device(dev->vfd_enc_drm);
@@ -1316,6 +1340,9 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 	del_timer_sync(&dev->watchdog_timer);
 	flush_workqueue(dev->watchdog_wq);
 	destroy_workqueue(dev->watchdog_wq);
+	del_timer_sync(&dev->mfc_idle_timer);
+	flush_workqueue(dev->mfc_idle_wq);
+	destroy_workqueue(dev->mfc_idle_wq);
 	flush_workqueue(dev->butler_wq);
 	destroy_workqueue(dev->butler_wq);
 	video_unregister_device(dev->vfd_enc);

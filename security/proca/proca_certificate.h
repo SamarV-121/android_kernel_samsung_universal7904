@@ -17,7 +17,15 @@
 #ifndef _LINUX_PROCA_CERTIFICATE_H
 #define _LINUX_PROCA_CERTIFICATE_H
 
-#include <linux/proca.h>
+#include <linux/types.h>
+
+struct proca_certificate {
+	char *app_name;
+	size_t app_name_size;
+
+	char *five_signature_hash;
+	size_t five_signature_hash_size;
+};
 
 int parse_proca_certificate(const char *certificate_buff,
 			    const size_t buff_size,

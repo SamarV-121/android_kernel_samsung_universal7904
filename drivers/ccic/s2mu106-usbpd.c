@@ -790,6 +790,18 @@ static bool s2mu106_poll_status(void *_data)
 	if ((intr[0] | intr[1] | intr[2] | intr[3] | intr[4] | intr[5]) == 0)
 		goto out;
 
+	/* GOODCRC with MSG_PASS, when first goodcrc of src_cap 
+	 * but, if with request, pass is valid */
+	if ((intr[0] & S2MU106_REG_INT_STATUS0_MSG_GOODCRC) &&
+		(pdic_data->power_role == PDIC_SOURCE) &&
+		(pdic_data->first_goodcrc == 0)) {
+		pdic_data->first_goodcrc = 1;
+		if ((intr[4] & S2MU106_REG_INT_STATUS4_MSG_PASS) &&
+			!(intr[2] & S2MU106_REG_INT_STATUS2_MSG_REQUEST)) {
+			intr[4] &= ~ S2MU106_REG_INT_STATUS4_MSG_PASS;
+		}
+	}
+
 	if ((intr[2] & S2MU106_REG_INT_STATUS2_WAKEUP) ||
 		(intr[4] & S2MU106_REG_INT_STATUS4_CC12_DET_IRQ))
 		s2mu106_set_irq_enable(pdic_data, ENABLED_INT_0, ENABLED_INT_1,
@@ -2445,6 +2457,7 @@ static void s2mu106_usbpd_prevent_watchdog_reset(
 	mutex_lock(&pdic_data->lpm_mutex);
 	if (!pdic_data->lpm_mode) {
 		if (s2mu106_usbpd_lpm_check(pdic_data) == 0) {
+			msleep(30); //for waiting jig communication
 			s2mu106_usbpd_read_reg(i2c, S2MU106_REG_INT_STATUS2, &val);
 			s2mu106_usbpd_set_vbus_wakeup(pdic_data, VBUS_WAKEUP_DISABLE);
 			pr_info("%s force to lpm mode\n", __func__);
@@ -2761,6 +2774,7 @@ static void s2mu106_usbpd_detach_init(struct s2mu106_usbpd_data *pdic_data)
 	pdic_data->pd_vbus_short_check = false;
 	pdic_data->vbus_short = false;
 	pdic_data->is_killer = false;
+	pdic_data->first_goodcrc = 0;
 	if (pdic_data->regulator_en)
 		ret = regulator_disable(pdic_data->regulator);
 #ifdef CONFIG_BATTERY_SAMSUNG
@@ -3431,6 +3445,7 @@ static void s2mu106_usbpd_pdic_data_init(struct s2mu106_usbpd_data *_data)
 	_data->pm_cc1 = 0;
 	_data->pm_cc2 = 0;
 	_data->is_killer = 0;
+	_data->first_goodcrc = 0;
 }
 
 static int of_s2mu106_dt(struct device *dev,

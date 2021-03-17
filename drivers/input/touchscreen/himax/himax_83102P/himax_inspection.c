@@ -33,7 +33,7 @@ int HX_CRITERIA_SIZE;
 char *g_rslt_data;
 static char g_file_path[256];
 static char g_rslt_log[256];
-static char g_start_log[256];
+static char g_start_log[512];
 #define FAIL_IN_INDEX "%s: %s FAIL in index %d\n"
 #define ABS(x)  (((x) < 0) ? -(x) : (x))
 
@@ -224,8 +224,8 @@ static int hx_test_data_pop_out(char *rslt_buf, char *filepath)
 	set_fs(get_ds());
 	vfs_write(raw_file, rslt_buf,
 		 g_1kind_raw_size * HX_CRITERIA_ITEM * sizeof(char), &pos);
-	if (raw_file != NULL)
-		filp_close(raw_file, NULL);
+
+	filp_close(raw_file, NULL);
 
 	set_fs(fs);
 
@@ -239,7 +239,7 @@ static int hx_test_data_get(uint32_t RAW[], char *start_log, char *result,
 {
 	uint32_t i;
 
-	ssize_t len = 0;
+	uint32_t len = 0;
 	char *testdata = NULL;
 	uint32_t SZ_SIZE = g_1kind_raw_size;
 
@@ -402,10 +402,6 @@ static uint32_t himax_get_rawdata(uint32_t RAW[], uint32_t datalen, uint8_t chec
 	/* Copy Data*/
 	for (i = 0; i < ic_data->HX_TX_NUM*ic_data->HX_RX_NUM; i++) {
 		RAW[i] = tmp_rawdata[(i * 2) + 1] * 256 + tmp_rawdata[(i * 2)];
-	#ifdef SEC_FACTORY_MODE
-		if (checktype == HIMAX_ABS_NOISE)
-			RAW[i] = (int16_t)RAW[i];
-	#endif
 	}
 
 	for (j = 0; j < ic_data->HX_RX_NUM; j++) {
@@ -581,7 +577,6 @@ static void himax_set_N_frame(uint16_t Nframe, uint8_t checktype)
 		checktype == HIMAX_LPWUG_ABS_NOISE)
 		himax_neg_noise_sup(tmp_data);
 
-	g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
 }
 
 static void himax_get_noise_base(uint8_t checktype)/*Normal Threshold*/
@@ -1344,10 +1339,12 @@ static int himax_get_max_dc(void)
 /*	 HX_GAP END*/
 static uint32_t mpTestFunc(uint8_t checktype, uint32_t datalen)
 {
-	uint32_t len;
+	uint32_t len = 0;
 	uint32_t RAW[datalen];
 	int n_frame = 0;
 	uint32_t ret_val = HX_INSPECT_OK;
+
+	memset(RAW, 0, datalen*sizeof(RAW[0]));
 
 	/*uint16_t* pInspectGridData = &gInspectGridData[0];*/
 	/*uint16_t* pInspectNoiseData = &gInspectNoiseData[0];*/
@@ -1475,10 +1472,10 @@ static int hiamx_parse_str2int(char *str)
 	int i = 0;
 	int temp_cal = 0;
 	int result = 0;
-	int str_len = strlen(str);
+	unsigned int str_len = strlen(str);
 	int negtive_flag = 0;
 
-	for (i = 0; i < strlen(str); i++) {
+	for (i = 0; i < str_len; i++) {
 		if (str[i] != '-' && str[i] > '9' && str[i] < '0') {
 			E("%s: Parsing fail!\n", __func__);
 			result = -9487;
@@ -1774,7 +1771,7 @@ static int himax_test_item_parse(char *str_data, int str_size)
 
 	do {
 		str_ptr = strnstr(str_ptr, "HIMAX", size);
-		end_ptr = strnstr(str_ptr, "\x0d\x0a", size);
+		end_ptr = strnstr(str_ptr, "\r\n", size);
 		if (str_ptr != NULL && end_ptr != NULL) {
 			while (g_himax_inspection_mode[i]) {
 				if (strncmp(str_ptr, g_himax_inspection_mode[i], end_ptr - str_ptr) == 0) {
@@ -2253,6 +2250,45 @@ static void hx_findout_limit(uint32_t *RAW, int *limit_val, int sz_mutual)
 	I("%s: max=%d, min=%d\n", __func__, limit_val[0], limit_val[1]);
 }
 
+static void himax_osr_ctrl(bool enable)
+{
+	uint8_t tmp_addr[4] = {0};
+	uint8_t tmp_data[4] = {0};
+	uint8_t w_byte = 0;
+	uint8_t back_byte = 0;
+	uint8_t retry = 10;
+
+	I("%s %s: Entering\n", HIMAX_LOG_TAG, __func__);
+
+	tmp_addr[3] = 0x10; tmp_addr[2] = 0x00; tmp_addr[1] = 0x70; tmp_addr[0] = 0x88;
+
+	do {
+		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
+
+		if (enable == 0) {
+			tmp_data[0] &= ~(1 << 4);
+			tmp_data[0] &= ~(1 << 5);
+		} else {
+			tmp_data[0] |= (1 << 4);
+			tmp_data[0] |= (1 << 5);
+		}
+
+		w_byte = tmp_data[0];
+
+		g_core_fp.fp_register_write(tmp_addr, 4, tmp_data, 0);
+		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
+		back_byte = tmp_data[0];
+		if (w_byte != back_byte)
+			I("%s %s: Write osr_ctrl failed, w_byte = %02X, back_byte = %02X\n",
+			HIMAX_LOG_TAG, __func__, w_byte, back_byte);
+		else {
+			I("%s %s: Write osr_ctrl correctly, w_byte = %02X, back_byte = %02X\n",
+			HIMAX_LOG_TAG, __func__, w_byte, back_byte);
+			break;
+		}
+	} while (--retry > 0);
+}
+
 static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 {
 	int ret = 0;
@@ -2274,6 +2310,7 @@ static int hx_get_one_raw(uint32_t *RAW, uint8_t checktype, uint32_t datalen)
 
 	himax_switch_mode_inspection(checktype);
 	if (checktype == HIMAX_ABS_NOISE || checktype == HIMAX_WEIGHT_NOISE) {
+		himax_osr_ctrl(0); /*disable OSR_HOP_EN*/
 		himax_set_N_frame(NOISEFRAME, checktype);
 		/* himax_get_noise_base(); */
 	} else if (checktype == HIMAX_ACT_IDLE_RAWDATA
@@ -3324,7 +3361,7 @@ END_OUPUT:
 	himax_int_enable(1);
 }
 
-static void get_rawcap_all(void *dev_data)
+static void run_get_rawcap_all(void *dev_data)
 {
 	char temp[SEC_CMD_STR_LEN] = { 0 };
 	char *buf = NULL;
@@ -4564,7 +4601,7 @@ struct sec_cmd sec_cmds[] = {
 	{SEC_CMD("get_x_num", get_all_x_num),},
 	{SEC_CMD("get_y_num", get_all_y_num),},
 	{SEC_CMD("get_rawcap", get_rawcap),},
-	{SEC_CMD("get_rawcap_all", get_rawcap_all),},
+	{SEC_CMD("run_get_rawcap_all", run_get_rawcap_all),},
 	{SEC_CMD("get_open", get_open),},
 	{SEC_CMD("get_open_all", get_open_all),},
 	{SEC_CMD("get_mic_open", get_mic_open),},

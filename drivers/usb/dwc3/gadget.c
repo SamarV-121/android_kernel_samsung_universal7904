@@ -1750,6 +1750,9 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		dwc3_event_buffers_cleanup(dwc);
 		__dwc3_gadget_ep_disable(dwc->eps[1]);
 		__dwc3_gadget_ep_disable(dwc->eps[0]);
+		
+		/* we need to clear ep0 delayed status flag */
+		dwc->delayed_status = 0;
 
 		reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 		reg &= ~DWC3_DCTL_RUN_STOP;
