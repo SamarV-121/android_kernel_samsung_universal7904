@@ -481,7 +481,10 @@ config USB_CONFIGFS_F_CONN_GADGET
 config USB_F_CONN_GADGET_NDOP
         bool "Conn gadget that do not support DexLive"
         depends on USB_CONFIGFS_F_CONN_GADGET
-	depends on ANDROID_MAJOR_VERSION >= "q"
+	depends on ANDROID_MAJOR_VERSION != "n"
+	depends on ANDROID_MAJOR_VERSION != "o"
+	depends on ANDROID_MAJOR_VERSION != "p"
+	default y
         help
           Next SideSync
 

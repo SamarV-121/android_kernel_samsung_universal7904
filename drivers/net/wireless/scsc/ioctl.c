@@ -63,6 +63,7 @@
 #define CMD_GETROAMSCANCHANNELS         "GETROAMSCANCHANNELS"
 #define CMD_ADDROAMSCANCHANNELS         "ADDROAMSCANCHANNELS"
 #define CMD_SENDACTIONFRAME             "SENDACTIONFRAME"
+#define CMD_CERTSENDACTIONFRAME         "CERTSENDACTIONFRAME"
 #define CMD_GETNCHOMODE                 "GETNCHOMODE"
 #define CMD_SETNCHOMODE                 "SETNCHOMODE"
 #define CMD_GETDFSSCANMODE                 "GETDFSSCANMODE"
@@ -83,6 +84,7 @@
 #define CMD_SET_LATENCY_MODE "SET_LATENCY_MODE"
 #define CMD_SET_POWER_MGMT "SET_POWER_MGMT"
 #endif
+#define CMD_SET_LATENCY_CRITICAL "SET_LATENCY_CRITICAL"
 #define CMD_SET_DISCONNECT_IES "SET_DISCONNECT_IES"
 
 #define CMD_SETBAND "SETBAND"
@@ -791,7 +793,7 @@ static ssize_t slsi_rx_filter_num_write(struct net_device *dev, char *buffer, in
 }
 
 #ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 90000)
+#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 9)
 static ssize_t slsi_create_interface(struct net_device *dev, char *buffer, int buf_len)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
@@ -933,8 +935,6 @@ static ssize_t slsi_freq_band_write(struct net_device *dev, char *command, int c
 	struct slsi_dev   *sdev = ndev_vif->sdev;
 	uint band = 0;
 #ifdef CONFIG_SCSC_WLAN_WES_NCHO
-	struct sk_buff    *req;
-	struct sk_buff    *cfm;
 	int                ret = 0;
 #endif
 	struct slsi_ioctl_args *ioctl_args = NULL;
@@ -973,32 +973,12 @@ static ssize_t slsi_freq_band_write(struct net_device *dev, char *command, int c
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
-
-	SLSI_DBG1_NODEV(SLSI_MLME, "mlme_set_band_req(vif:%u band:%u)\n", ndev_vif->ifnum, band);
-
-	req = fapi_alloc(mlme_set_band_req, MLME_SET_BAND_REQ, ndev_vif->ifnum, 0);
-	if (!req) {
+	ret = slsi_mlme_set_band_req(sdev, dev, band);
+	if (ret == -EIO) {
 		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 		kfree(ioctl_args);
-		return -EIO;
+		return ret;
 	}
-	fapi_set_u16(req, u.mlme_set_band_req.vif, ndev_vif->ifnum);
-	fapi_set_u16(req, u.mlme_set_band_req.band, band);
-	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_BAND_CFM);
-	if (!cfm) {
-		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
-		kfree(ioctl_args);
-		return -EIO;
-	}
-
-	if (fapi_get_u16(cfm, u.mlme_set_band_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
-		SLSI_NET_ERR(dev, "mlme_set_band_cfm(result:0x%04x) ERROR\n",
-			     fapi_get_u16(cfm, u.mlme_set_band_cfm.result_code));
-		ret = -EINVAL;
-	}
-
-	slsi_kfree_skb(cfm);
-
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
@@ -1654,11 +1634,11 @@ static ssize_t slsi_roam_scan_band_read(struct net_device *dev, char *command, i
 
 static ssize_t slsi_roam_scan_control_write(struct net_device *dev, char *command, int buf_len)
 {
-	struct netdev_vif *ndev_vif = netdev_priv(dev);
-	struct slsi_dev   *sdev = ndev_vif->sdev;
+	struct netdev_vif      *ndev_vif   = netdev_priv(dev);
+	struct slsi_dev        *sdev       = ndev_vif->sdev;
 	struct slsi_ioctl_args *ioctl_args = NULL;
-	int mode = 0;
-	int res;
+	int                    mode        = 0;
+	int                    res         = 0;
 
 	ioctl_args = slsi_get_private_command_args(command, buf_len, 1);
 	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
@@ -1666,29 +1646,42 @@ static ssize_t slsi_roam_scan_control_write(struct net_device *dev, char *comman
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
 	if (!sdev->device_config.ncho_mode) {
 		SLSI_INFO(sdev, "Command not allowed, NCHO is disabled\n");
-		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
-		kfree(ioctl_args);
-		return -EINVAL;
+		res = -EINVAL;
+		goto exit;
 	}
 
 	if (!slsi_str_to_int(ioctl_args->args[0], &mode)) {
 		SLSI_ERR(sdev, "Invalid string: '%s'\n", ioctl_args->args[0]);
-		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
-		kfree(ioctl_args);
-		return -EINVAL;
+		res = -EINVAL;
+		goto exit;
 	}
 
 	if (mode == 0 || mode == 1) {
 		sdev->device_config.roam_scan_mode = mode;
 	} else {
 		SLSI_ERR(sdev, "Invalid roam Mode: Must be 0 or, 1 Not '%d'\n", mode);
-		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
-		kfree(ioctl_args);
-		return -EINVAL;
+		res = -EINVAL;
+		goto exit;
 	}
-	kfree(ioctl_args);
+
 	res = slsi_set_mib_roam(sdev, NULL, SLSI_PSID_UNIFI_ROAM_SCAN_CONTROL, sdev->device_config.roam_scan_mode);
+	if (res)
+		goto exit;
+
+	/* If the mode is 0, Clear the roam cache */
+	if (!mode) {
+		memset(&sdev->device_config.wes_roam_scan_list, 0, sizeof(struct slsi_wes_mode_roam_scan_channels));
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+		res = slsi_mlme_set_cached_channels(sdev, dev, 0, NULL);
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		kfree(ioctl_args);
+		return res;
+	}
+
+	exit:
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+	kfree(ioctl_args);
 	return res;
 }
 
@@ -2584,7 +2577,7 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 	hdr = (struct ieee80211_hdr *)final_buf;
 	hdr->frame_control = IEEE80211_FC(IEEE80211_FTYPE_MGMT, IEEE80211_STYPE_ACTION);
 	SLSI_ETHER_COPY(hdr->addr1, bssid);
-	SLSI_ETHER_COPY(hdr->addr2, sdev->hw_addr);
+	SLSI_ETHER_COPY(hdr->addr2, dev->dev_addr);
 	SLSI_ETHER_COPY(hdr->addr3, bssid);
 	memcpy(final_buf + IEEE80211_HEADER_SIZE, buf, len);
 
@@ -2597,6 +2590,92 @@ static ssize_t slsi_send_action_frame(struct net_device *dev, char *command, int
 	kfree(final_buf);
 	kfree(ioctl_args);
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return r;
+}
+
+static int slsi_send_action_frame_cert(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif    *ndev_vif = netdev_priv(dev);
+	struct slsi_dev      *sdev = ndev_vif->sdev;
+	char                 *temp;
+	int                  r = 0;
+	u16                  host_tag = slsi_tx_mgmt_host_tag(sdev);
+	struct ieee80211_hdr *hdr;
+	u8                   *buf = NULL;
+	u8                   *final_buf = NULL;
+	u8                   temp_byte;
+	int                  len = 0;
+	int                  final_length = 0;
+	int                  i = 0, j = 0;
+	struct slsi_ioctl_args *ioctl_args = NULL;
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	if (!ndev_vif->activated || ndev_vif->vif_type != FAPI_VIFTYPE_STATION ||
+	    ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTED) {
+		SLSI_ERR(sdev, "Not a STA vif or status is not CONNECTED\n");
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		return -EINVAL;
+	}
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+
+	ioctl_args = slsi_get_private_command_args(command, buf_len, 2);
+	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
+
+	if (ioctl_args->arg_count < 2) {
+		SLSI_ERR(sdev, "Invalid argument count = %d\n", ioctl_args->arg_count);
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	if (!slsi_str_to_int(ioctl_args->args[0], &len)) {
+		SLSI_ERR(sdev, "Invalid length string: '%s'\n", ioctl_args->args[0]);
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	buf = kmalloc((len + 1) / 2, GFP_KERNEL);
+
+	if (!buf) {
+		SLSI_ERR(sdev, "Malloc failed\n");
+		kfree(ioctl_args);
+		return -ENOMEM;
+	}
+
+	/*We receive a char buffer, convert to hex*/
+	temp = ioctl_args->args[1];
+	for (i = 0, j = 0; j < len; j += 2) {
+		if (j + 1 == len)
+			temp_byte = slsi_parse_hex(temp[j]);
+		else
+			temp_byte = slsi_parse_hex(temp[j]) << 4 | slsi_parse_hex(temp[j + 1]);
+		buf[i++] = temp_byte;
+	}
+	len = i;
+
+	final_length = len + IEEE80211_HEADER_SIZE;
+	final_buf = kmalloc(final_length, GFP_KERNEL);
+	if (!final_buf) {
+		SLSI_ERR(sdev, "Malloc failed\n");
+		kfree(ioctl_args);
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	hdr = (struct ieee80211_hdr *)final_buf;
+	hdr->frame_control = IEEE80211_FC(IEEE80211_FTYPE_MGMT, IEEE80211_STYPE_ACTION);
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	SLSI_ETHER_COPY(hdr->addr1, ndev_vif->sta.bssid);
+	SLSI_ETHER_COPY(hdr->addr3, ndev_vif->sta.bssid);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	SLSI_ETHER_COPY(hdr->addr2, sdev->hw_addr);
+	memcpy(final_buf + IEEE80211_HEADER_SIZE, buf, len);
+
+	kfree(buf);
+
+	r = slsi_mlme_send_frame_mgmt(sdev, dev, final_buf, final_length, FAPI_DATAUNITDESCRIPTOR_IEEE802_11_FRAME, FAPI_MESSAGETYPE_IEEE80211_ACTION, host_tag, 0, 0, 0);
+
+	kfree(final_buf);
+	kfree(ioctl_args);
 	return r;
 }
 
@@ -2900,7 +2979,7 @@ static int slsi_print_regulatory(struct slsi_802_11d_reg_domain *domain_info, ch
 {
 	int  cur_pos = 0;
 	int  i, j, k;
-	char *dfs_region_str[] = {"unknown", "ETSI", "FCC", "JAPAN", "GLOBAL", "CHINA"};
+	char *dfs_region_str[] = {"unknown", "FCC", "ETSI", "JAPAN", "GLOBAL", "CHINA"};
 	u8   dfs_region_index;
 	struct ieee80211_reg_rule *reg_rule;
 	int  channel_start_freq = 0;
@@ -3282,7 +3361,7 @@ int slsi_get_sta_info(struct net_device *dev, char *command, int buf_len)
 		return -EINVAL;
 	}
 
-#if defined(SCSC_SEP_VERSION) && (SCSC_SEP_VERSION >= 90000)
+#if defined(SCSC_SEP_VERSION) && (SCSC_SEP_VERSION >= 9)
 	len = snprintf(command, buf_len, "GETSTAINFO %pM Rx_Retry_Pkts=%d Rx_BcMc_Pkts=%d CAP=%04x %02x:%02x:%02x ",
 		       ndev_vif->ap.last_disconnected_sta.address,
 		       ndev_vif->ap.last_disconnected_sta.rx_retry_packets,
@@ -3577,6 +3656,7 @@ static int slsi_enhanced_arp_start_stop(struct net_device *dev, char *command, i
 		/* reset all the counters in host and firmware */
 		slsi_read_enhanced_arp_rx_count_by_lower_mac(sdev, dev, SLSI_PSID_UNIFI_ARP_DETECT_RESPONSE_COUNTER);
 		memset(&ndev_vif->enhanced_arp_stats, 0, sizeof(ndev_vif->enhanced_arp_stats));
+		memset(ndev_vif->enhanced_arp_host_tag, 0, sizeof(ndev_vif->enhanced_arp_host_tag));
 		ndev_vif->enhanced_arp_detect_enabled = true;
 		result = slsi_mlme_arp_detect_request(sdev, dev, FAPI_ACTION_START, ndev_vif->target_ip_addr);
 	} else { /* stop enhanced arp detect */
@@ -3671,7 +3751,7 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	} else if (strncasecmp(command, CMD_RXFILTERREMOVE, strlen(CMD_RXFILTERREMOVE)) == 0) {
 		ret = slsi_rx_filter_num_write(dev, command, priv_cmd.total_len, 0);
 #ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
-#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 90000)
+#if !defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 9)
 	} else if (strncasecmp(command, CMD_INTERFACE_CREATE, strlen(CMD_INTERFACE_CREATE)) == 0) {
 		ret = slsi_create_interface(dev, command, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_INTERFACE_DELETE, strlen(CMD_INTERFACE_DELETE)) == 0) {
@@ -3771,6 +3851,8 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		ret = slsi_auto_chan_write(dev, command, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_SENDACTIONFRAME, strlen(CMD_SENDACTIONFRAME)) == 0) {
 		ret = slsi_send_action_frame(dev, command, priv_cmd.total_len);
+	} else if (strncasecmp(command, CMD_CERTSENDACTIONFRAME, strlen(CMD_CERTSENDACTIONFRAME)) == 0) {
+		ret = slsi_send_action_frame_cert(dev, command, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_HAPD_MAX_NUM_STA, strlen(CMD_HAPD_MAX_NUM_STA)) == 0) {
 		ret = slsi_setting_max_sta_write(dev, command, priv_cmd.total_len);
 	} else if (strncasecmp(command, CMD_COUNTRY, strlen(CMD_COUNTRY)) == 0) {
@@ -3846,6 +3928,27 @@ int slsi_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	} else if (strncasecmp(command, CMD_SET_POWER_MGMT, strlen(CMD_SET_POWER_MGMT)) == 0) {
 		ret = slsi_set_power_mode(dev, command, priv_cmd.total_len);
 #endif
+	} else if (strncasecmp(command, CMD_SET_LATENCY_CRITICAL, strlen(CMD_SET_LATENCY_CRITICAL)) == 0) {
+		struct netdev_vif *ndev_vif = netdev_priv(dev);
+		struct slsi_dev   *sdev = ndev_vif->sdev;
+		struct slsi_ioctl_args *ioctl_args = NULL;
+		int latency_mode = 0;
+
+		ioctl_args = slsi_get_private_command_args(command, priv_cmd.total_len, 1);
+		SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
+
+		if (!slsi_str_to_int(ioctl_args->args[0], &latency_mode)) {
+			SLSI_ERR(sdev, "Invalid string: '%s'\n", ioctl_args->args[0]);
+			ret = -EINVAL;
+		} else {
+			if (latency_mode != 0 && latency_mode != 1) {
+				SLSI_ERR(sdev, "Invalid latency_mode: '%s'\n", ioctl_args->args[0]);
+				ret = -EINVAL;
+			} else {
+				ret = slsi_set_latency_mode(dev, latency_mode, priv_cmd.total_len);
+			}
+		}
+		kfree(ioctl_args);
 	} else if (strncasecmp(command, CMD_SET_DISCONNECT_IES, strlen(CMD_SET_DISCONNECT_IES)) == 0) {
 		ret = slsi_set_disconnect_ies(dev, command, priv_cmd.total_len);
 #ifdef CONFIG_SCSC_WLAN_STA_ENHANCED_ARP_DETECT

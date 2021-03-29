@@ -257,7 +257,6 @@
 
 #define REDUCE_CURRENT_STEP         25
 #define MINIMUM_INPUT_CURRENT           300
-#define SLOW_CHARGING_CURRENT_STANDARD      400
 
 #define FAKE_BAT_LEVEL          50
 
@@ -329,7 +328,6 @@ typedef struct s2mu106_charger_platform_data {
 	int recharge_vcell;
 	uint32_t is_1MHz_switching:1;
 	int chg_switching_freq;
-	int slow_charging_current;
 } s2mu106_charger_platform_data_t;
 
 
@@ -383,7 +381,6 @@ struct s2mu106_charger_data {
 
 	int irq_ivr_enabled;
 	int ivr_on;
-	bool slow_charging;
 
 	/* efficiency 9V charging */
 	unsigned char reg_0x9E;
