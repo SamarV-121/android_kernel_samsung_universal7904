@@ -10,6 +10,8 @@
  *	Max Cohan: Fixed invalid FSINFO offset when info_sector is 0
  */
 
+/* @fs.sec -- d2cd60d3eb699151b0b559b61dfe9103 -- */
+
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <linux/mpage.h>
@@ -53,6 +55,7 @@ struct fat_bios_param_block {
 	u32	fat32_vol_id;
 };
 
+static struct kset *fat_kset;
 static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;
 static char fat_default_iocharset[] = CONFIG_FAT_DEFAULT_IOCHARSET;
 
@@ -698,7 +701,7 @@ static int __init fat_init_inodecache(void)
 	return 0;
 }
 
-static void __exit fat_destroy_inodecache(void)
+static void fat_destroy_inodecache(void)
 {
 	/*
 	 * Make sure all delayed rcu free inodes are flushed before we
@@ -1863,15 +1866,39 @@ static int __init init_fat_fs(void)
 	if (err)
 		goto failed;
 
+	fat_kset = kset_create_and_add("fat", NULL, fs_kobj);
+	if (!fat_kset) {
+		pr_err("FAT-fs failed to create fat kset\n");
+		err = -ENOMEM;
+		goto failed;
+	}
+
+	err = fat_uevent_init(fat_kset);
+	if (err)
+		goto failed;
+
 	return 0;
 
 failed:
+	fat_uevent_uninit();
+	if (fat_kset) {
+		kset_unregister(fat_kset);
+		fat_kset = NULL;
+	}
 	fat_cache_destroy();
+	fat_destroy_inodecache();
 	return err;
 }
 
 static void __exit exit_fat_fs(void)
 {
+	fat_uevent_uninit();
+
+	if (fat_kset) {
+		kset_unregister(fat_kset);
+		fat_kset = NULL;
+	}
+
 	fat_cache_destroy();
 	fat_destroy_inodecache();
 }

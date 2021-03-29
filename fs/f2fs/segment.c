@@ -1462,6 +1462,10 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
 
+			if (dpolicy->timeout != 0 &&
+				f2fs_time_over(sbi, dpolicy->timeout))
+				break;
+
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 						!is_idle(sbi, DISCARD_TIME)) {
 				io_interrupted = true;
@@ -3139,6 +3143,8 @@ void f2fs_do_write_meta_page(struct f2fs_sb_info *sbi, struct page *page,
 		.in_list = false,
 	};
 
+	f2fs_cond_set_fua(&fio);
+
 	if (unlikely(page->index >= MAIN_BLKADDR(sbi)))
 		fio.op_flags &= ~REQ_META;
 
@@ -4195,18 +4201,12 @@ static int init_victim_secmap(struct f2fs_sb_info *sbi)
 	if (!dirty_i->victim_secmap)
 		return -ENOMEM;
 
-	/* W/A for FG_GC failure due to Atomic Write File */    
+	/* W/A for FG_GC failure due to Atomic Write File and Pinned File */
 	dirty_i->blacklist_victim_secmap = f2fs_kvzalloc(sbi, bitmap_size, 
 								GFP_KERNEL);
 	if (!dirty_i->blacklist_victim_secmap)
 		return -ENOMEM;
-#if defined(CONFIG_SAMSUNG_USER_TRIAL) || !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	/* W/A for GC failure due to Pinned File */
-	dirty_i->pblacklist_victim_secmap = f2fs_kvzalloc(sbi, bitmap_size,
-								GFP_KERNEL);
-	if (!dirty_i->pblacklist_victim_secmap)
-		return -ENOMEM;
-#endif
+
 	return 0;
 }
 
@@ -4352,12 +4352,8 @@ static void destroy_victim_secmap(struct f2fs_sb_info *sbi)
 	struct dirty_seglist_info *dirty_i = DIRTY_I(sbi);
 	kvfree(dirty_i->victim_secmap);
 
-	/* W/A for FG_GC failure due to Atomic Write File */    
+	/* W/A for FG_GC failure due to Atomic Write File and Pinned File */
 	kvfree(dirty_i->blacklist_victim_secmap);
-#if defined(CONFIG_SAMSUNG_USER_TRIAL) || !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	/* W/A for GC failure due to Pinned File */
-	kvfree(dirty_i->pblacklist_victim_secmap);
-#endif
 }
 
 static void destroy_dirty_segmap(struct f2fs_sb_info *sbi)

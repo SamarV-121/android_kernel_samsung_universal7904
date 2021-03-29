@@ -168,7 +168,7 @@ static unsigned char SEQ_ELVSS_SET[] = {
 
 static unsigned char SEQ_HBM_ON[] = {
 	0x53,
-	0xE0,
+	0xE8,
 };
 
 static unsigned char SEQ_HBM_OFF[] = {

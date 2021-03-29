@@ -22,6 +22,7 @@
 #define LDI_REG_MANUFACTURE_INFO_CELL_ID	0xEF
 #define LDI_REG_CHIP_ID				0xD1
 #define LDI_REG_ELVSS				0xB7
+#define LDI_REG_MCA_CHECK			0xC4
 
 /* len is read length */
 #define LDI_LEN_ID				3
@@ -31,6 +32,7 @@
 #define LDI_LEN_MANUFACTURE_INFO_CELL_ID	16
 #define LDI_LEN_CHIP_ID				6
 #define LDI_LEN_ELVSS				(ELVSS_CMD_CNT - 1)
+#define LDI_LEN_MCA_CHECK			33
 
 /* offset is position including addr, not only para */
 #define LDI_OFFSET_ACL		1
@@ -191,7 +193,7 @@ static unsigned char SEQ_ELVSS_SET[] = {
 
 static unsigned char SEQ_HBM_ON[] = {
 	0x53,
-	0xE0,
+	0xE8,
 };
 
 static unsigned char SEQ_HBM_OFF[] = {

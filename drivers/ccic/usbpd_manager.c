@@ -848,8 +848,6 @@ void usbpd_manager_plug_attach(struct device *dev, muic_attached_dev_t new_dev)
 	struct policy_data *policy = &pd_data->policy;
 	struct usbpd_manager_data *manager = &pd_data->manager;
 
-	CC_NOTI_ATTACH_TYPEDEF pd_notifier;
-
 	if (new_dev == ATTACHED_DEV_TYPE3_CHARGER_MUIC) {
 		if (policy->send_sink_cap || (manager->ps_rdy == 1 &&
 		manager->prev_available_pdo != pd_noti.sink_status.available_pdo_num)) {
@@ -859,14 +857,8 @@ void usbpd_manager_plug_attach(struct device *dev, muic_attached_dev_t new_dev)
 			pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK;
 		manager->ps_rdy = 1;
 		manager->prev_available_pdo = pd_noti.sink_status.available_pdo_num;
-		pd_notifier.src = CCIC_NOTIFY_DEV_CCIC;
-		pd_notifier.dest = CCIC_NOTIFY_DEV_BATTERY;
-		pd_notifier.id = CCIC_NOTIFY_ID_POWER_STATUS;
-		pd_notifier.attach = 1;
-		pd_notifier.pd = &pd_noti;
-#if defined(CONFIG_CCIC_NOTIFIER)
-		ccic_notifier_notify((CC_NOTI_TYPEDEF *)&pd_notifier, &pd_noti, 1/* pdic_attach */);
-#endif
+
+		ccic_event_work(pd_data->phy_driver_data,CCIC_NOTIFY_DEV_BATTERY,CCIC_NOTIFY_ID_POWER_STATUS,1,0);
 	}
 
 #else
@@ -910,19 +902,18 @@ void usbpd_manager_acc_detach(struct device *dev)
 static int usbpd_manager_support_vdm(struct usbpd_data *pd_data,
 		usbpd_manager_command_type command)
 {
-	struct policy_data *policy = &pd_data->policy;
+	struct usbpd_manager_data *manager = &pd_data->manager;
+
 	switch (command) {
 	case MANAGER_REQ_VDM_DISCOVER_SVID:
-		/* Product Type 101b == AMA */
-		if (policy->rx_data_obj[1].id_header_vdo.Product_Type == 0x5) {
-			pr_info("%s, Discover ID == AMA\n", __func__);
-			return 1;
-		}
-		return 0;
 	case MANAGER_REQ_VDM_DISCOVER_MODE:
 	case MANAGER_REQ_VDM_ENTER_MODE:
 	case MANAGER_REQ_VDM_STATUS_UPDATE:
 	case MANAGER_REQ_VDM_DisplayPort_Configure:
+		if (manager->Vendor_ID == SAMSUNG_VENDOR_ID) {
+			pr_info("%s, Discover ID, VendorID == SAMSUNG \n", __func__);
+			return 1;
+		}
 #if defined(CONFIG_CCIC_ALTERNATE_MODE)
 		return 1;
 #else

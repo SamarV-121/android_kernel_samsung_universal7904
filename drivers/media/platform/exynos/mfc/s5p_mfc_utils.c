@@ -16,6 +16,8 @@
 #include "s5p_mfc_qos.h"
 
 #include "s5p_mfc_mem.h"
+#include "s5p_mfc_reg.h"
+#include "s5p_mfc_sync.h"
 
 int s5p_mfc_check_vb_with_fmt(struct s5p_mfc_fmt *fmt, struct vb2_buffer *vb)
 {
@@ -534,4 +536,15 @@ void mfc_idle_checker(unsigned long arg)
 	mfc_change_idle_mode(dev, MFC_IDLE_MODE_RUNNING);
 	queue_work(dev->mfc_idle_wq, &dev->mfc_idle_work);
 #endif
+}
+void s5p_mfc_dec_vb_index_info(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *buf)
+{
+	struct s5p_mfc_dec *dec = ctx->dec_priv;
+
+	if(dec->dynamic_used & (1 << buf->vb.vb2_buf.index)) {
+		mfc_info_dev("DPB Address change at index:%d\n",
+				buf->vb.vb2_buf.index);
+		ctx->dpb_info[buf->vb.vb2_buf.index] =  buf;
+		s5p_mfc_set_bit(buf->vb.vb2_buf.index, &ctx->vbindex_bits);
+	}
 }

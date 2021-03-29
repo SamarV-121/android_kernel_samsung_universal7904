@@ -192,6 +192,14 @@ config SEC_DEBUG_TSP_LOG
 	help
 	  This option enables additional log buffer for tsp log.
 
+config SEC_DEBUG_INIT_EXIT_PANIC
+	bool "Trigger panic when exiting init task group"
+	depends on SEC_DEBUG
+	default y
+	help
+	  This option enables early panic when it attempt to kill init tasks.
+	  It may happen before init task stack is destroyed for debugging.
+
 config SEC_DEBUG_SOFTDOG_PWDT
 	bool "Enable Soft Watchdog for Platform"
 	default y
@@ -301,3 +309,14 @@ config SEC_PERIPHERAL_SECURE_CHK
 	help
 	  This option supports secure check
 
+config SEC_DEBUG_SNAPSHOT_DISABLE
+	bool "Disable EXYNOS SNAPSHOT logging"
+	default n
+	help
+	  This option blocks exynos snapshot logging
+
+config SEC_DEBUG_SMALL_DEBUG_MODE
+	bool "Enable small debug mode"
+	default n
+	help
+	  This option supports small debug mode

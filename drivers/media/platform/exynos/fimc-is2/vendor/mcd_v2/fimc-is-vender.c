@@ -1205,8 +1205,6 @@ int fimc_is_vender_set_torch(u32 aeflashMode)
 		s2mpb02_set_torch_current(true);
 #elif defined(CONFIG_LEDS_S2MU005_FLASH)
 		s2mu005_led_mode_ctrl(S2MU005_FLED_MODE_MOVIE);
-#elif defined(CONFIG_LEDS_S2MU106_FLASH)
-		s2mu106_led_mode_ctrl(S2MU106_FLED_MODE_TORCH);
 #endif
 		break;
 	case AA_FLASHMODE_START: /*Pre flash mode*/
@@ -1220,17 +1218,12 @@ int fimc_is_vender_set_torch(u32 aeflashMode)
 #endif
 		break;
 	case AA_FLASHMODE_CAPTURE: /*Main flash mode*/
-#if defined(CONFIG_LEDS_S2MU106_FLASH)
-		s2mu106_led_mode_ctrl(S2MU106_FLED_MODE_FLASH);
-#endif
 		break;
 	case AA_FLASHMODE_OFF: /*OFF mode*/
 #ifdef CONFIG_LEDS_SKY81296
 		sky81296_torch_ctrl(0);
 #elif defined(CONFIG_LEDS_S2MU005_FLASH)
 		s2mu005_led_mode_ctrl(S2MU005_FLED_MODE_OFF);
-#elif defined(CONFIG_LEDS_S2MU106_FLASH)
-		s2mu106_led_mode_ctrl(S2MU106_FLED_MODE_OFF);
 #endif
 		break;
 	default:
