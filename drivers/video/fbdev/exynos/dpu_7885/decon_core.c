@@ -1382,6 +1382,14 @@ static int decon_set_mask_layer(struct decon_device *decon, struct decon_reg_dat
 	decon->mask_regs = regs;
 	ret = call_panel_ops(dsim, mask_brightness, dsim);
 
+	/* clear wait_mask_layer_trigger */
+	if (decon->wait_mask_layer_trigger) {
+		decon->wait_mask_layer_trigger = 0;
+		decon_info("wait_mask_layer_trigger [clear] wait:%d\n",
+			decon->wait_mask_layer_trigger);
+		wake_up_interruptible_all(&decon->wait_mask_layer_trigger_queue);
+	}
+
 	return 1; /* return 1 for checking trigger done */
 }
 #endif
@@ -1454,7 +1462,7 @@ static void __decon_update_regs(struct decon_device *decon, struct decon_reg_dat
 		goto update_exit;
 #endif
 
-	if (decon_reg_start(decon->id, &psr) < 0) {
+	if (decon_reg_start(decon->id, &psr) < 0 && !decon->ignore_vsync) {
 		decon_dump(decon);
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
 		log_decon_bigdata(decon);
@@ -1612,7 +1620,7 @@ static void decon_update_regs(struct decon_device *decon,
 		decon->frame_cnt_target = decon->frame_cnt + 1;
 		decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
 		decon_wait_for_vstatus(decon, 50);
-		if (decon_reg_wait_for_update_timeout(decon->id, SHADOW_UPDATE_TIMEOUT) < 0) {
+		if (decon_reg_wait_for_update_timeout(decon->id, SHADOW_UPDATE_TIMEOUT) < 0 && !decon->ignore_vsync) {
 			decon_dump(decon);
 #ifdef CONFIG_LOGGING_BIGDATA_BUG
 			log_decon_bigdata(decon);
@@ -1669,6 +1677,7 @@ static void decon_update_regs_handler(struct kthread_work *work)
 		decon_hiber_unblock(decon);
 		list_del(&data->list);
 		kfree(data);
+		atomic_dec(&decon->up.remaining_frame);
 	}
 }
 
@@ -1804,6 +1813,14 @@ static bool decon_get_mask_layer(struct decon_device *decon,
 		}
 	}
 
+	/* normal -> mask set wait_mask_layer_trigger */
+	/* mask -> normal set wait_mask_layer_trigger */
+	if (mask != decon->current_mask_layer) {
+		decon->wait_mask_layer_trigger = 1;
+		decon_info("wait_mask_layer_trigger [set] wait:%d\n",
+			decon->wait_mask_layer_trigger);
+	}
+
 	return mask;
 }
 #endif
@@ -1861,7 +1878,6 @@ static int decon_set_win_config(struct decon_device *decon,
 		goto err_prepare;
 
 	if (win_data->fence >= 0) {
-		decon_install_fence(fence, win_data->fence);
 #if defined(CONFIG_DPU_20)
 		decon_create_release_fences(decon, win_data, fence);
 #endif
@@ -1871,10 +1887,42 @@ static int decon_set_win_config(struct decon_device *decon,
 
 	mutex_lock(&decon->up.lock);
 	list_add_tail(&regs->list, &decon->up.list);
+	atomic_inc(&decon->up.remaining_frame);
+	win_data->extra.remained_frames =
+		atomic_read(&decon->up.remaining_frame);
 	mutex_unlock(&decon->up.lock);
 	queue_kthread_work(&decon->up.worker, &decon->up.work);
 
+	/**
+	 * The code is moved here because the DPU driver may get a wrong fd
+	 * through the released file pointer,
+	 * if the user(HWC) closes the fd and releases the file pointer.
+	 *
+	 * Since the user land can use fd from this point/time,
+	 * it can be guaranteed to use an unreleased file pointer
+	 * when creating a rel_fence in decon_create_release_fences(...)
+	 */
+	if (win_data->fence >= 0)
+                decon_install_fence(fence, win_data->fence);
+
 	mutex_unlock(&decon->lock);
+
+#if defined(CONFIG_SUPPORT_MASK_LAYER)
+	if (decon->wait_mask_layer_trigger) {
+		int timeout = 0;
+		timeout = wait_event_interruptible_timeout(decon->wait_mask_layer_trigger_queue,
+				!decon->wait_mask_layer_trigger,
+				msecs_to_jiffies(100));
+		if (timeout > 0) {
+			decon_info("wait_mask_layer_trigger [wq] wait:%d\n",
+				decon->wait_mask_layer_trigger);
+		} else {
+			decon->wait_mask_layer_trigger = 0; /* force clear */
+			decon_info("wait_mask_layer_trigger [wq] wait:%d [TIMEOUT!!]\n",
+				decon->wait_mask_layer_trigger);
+		}
+	}
+#endif
 
 	decon_dbg("%s -\n", __func__);
 
@@ -1890,6 +1938,7 @@ err_prepare:
 	}
 	kfree(regs);
 	win_data->fence = -1;
+	win_data->extra.remained_frames = -1;
 err:
 	mutex_unlock(&decon->lock);
 	return ret;
@@ -1941,10 +1990,9 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = decon_set_vsync_int(info, active);
 		break;
 
+	case S3CFB_WIN_CONFIG_OLD:
 	case S3CFB_WIN_CONFIG:
-		if (copy_from_user(&win_data,
-				   (struct decon_win_config_data __user *)arg,
-				   sizeof(struct decon_win_config_data))) {
+		if (copy_from_user(&win_data, (void __user *)arg, _IOC_SIZE(cmd))) {
 			ret = -EFAULT;
 			break;
 		}
@@ -2708,6 +2756,7 @@ static void decon_destroy_update_thread(struct decon_device *decon)
 static int decon_create_update_thread(struct decon_device *decon, char *name)
 {
 	INIT_LIST_HEAD(&decon->up.list);
+	atomic_set(&decon->up.remaining_frame, 0);
 	init_kthread_worker(&decon->up.worker);
 	decon->up.thread = kthread_run(kthread_worker_fn,
 			&decon->up.worker, name);
@@ -2912,6 +2961,9 @@ static int decon_probe(struct platform_device *pdev)
 	spin_lock_init(&decon->slock);
 	init_waitqueue_head(&decon->vsync.wait);
 	init_waitqueue_head(&decon->wait_vstatus);
+#if defined(CONFIG_SUPPORT_MASK_LAYER)
+	init_waitqueue_head(&decon->wait_mask_layer_trigger_queue);
+#endif
 	mutex_init(&decon->vsync.lock);
 	mutex_init(&decon->lock);
 	mutex_init(&decon->pm_lock);

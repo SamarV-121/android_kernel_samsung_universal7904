@@ -190,12 +190,17 @@ static unsigned char SEQ_ELVSS_SET[] = {
 
 static unsigned char SEQ_HBM_ON[] = {
 	0x53,
-	0xE0,
+	0xE8,
 };
 
 static unsigned char SEQ_HBM_OFF[] = {
 	0x53,
 	0x28,
+};
+
+static unsigned char SEQ_HBM_ON_DIMMING_OFF[] = {
+	0x53,
+	0xE0,
 };
 
 static unsigned char SEQ_HBM_OFF_DIMMING_OFF[] = {
@@ -287,7 +292,7 @@ enum {
 };
 
 static unsigned char *HBM_TABLE[TRANS_DIMMING_MAX][HBM_STATUS_MAX] = {
-	{SEQ_HBM_OFF_DIMMING_OFF, SEQ_HBM_ON},
+	{SEQ_HBM_OFF_DIMMING_OFF, SEQ_HBM_ON_DIMMING_OFF},
 	{SEQ_HBM_OFF, SEQ_HBM_ON}
 };
 

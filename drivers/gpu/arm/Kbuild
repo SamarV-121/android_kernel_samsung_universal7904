@@ -34,4 +34,7 @@ ifeq ($(CONFIG_MALI_TMIX),y)
 	ifeq ($(CONFIG_MALI_TMIX_R19P0),y)
 		obj-y += b_r19p0/
 	endif
+	ifeq ($(CONFIG_MALI_TMIX_R26P0),y)
+		obj-y += b_r26p0/
+	endif
 endif

@@ -141,7 +141,7 @@ static enum five_dmverity_codes is_dmverity_partition(
 	 */
 	for (i = 0; i < ARRAY_SIZE(dm_targets_name); ++i) {
 		if (!strncmp(target->type->name, dm_targets_name[i],
-				strlen(dm_targets_name[i]))) {
+				strlen(dm_targets_name[i]) + 1)) {
 			result = FIVE_DMV_PARTITION;
 			break;
 		}
@@ -204,7 +204,7 @@ exit:
 	return result;
 }
 
-#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+#if defined(CONFIG_SAMSUNG_PRODUCT_SHIP) && !defined(CONFIG_FIVE_DEBUG)
 bool five_is_dmverity_protected(const struct file *file)
 {
 	enum five_dmverity_codes dmv_file_status;
@@ -235,16 +235,16 @@ bool five_is_dmverity_protected(const struct file *file)
 static bool is_dmverity_prebuit_path(const struct file *file)
 {
 	const char * const paths[] = {
-		"/system/", "/vendor/", "/apex/"
+		"/system/", "/vendor/", "/apex/",
+		"/product/", "/odm/", "/prism/", "/optics/"
 	};
 	const char *pathname = NULL;
 	char *pathbuf = NULL;
+	char filename[NAME_MAX];
 	bool result = false;
 	size_t i;
 
-	pathname = five_d_path(&file->f_path, &pathbuf);
-	if (!pathname)
-		goto exit;
+	pathname = five_d_path(&file->f_path, &pathbuf, filename);
 
 	for (i = 0; i < ARRAY_SIZE(paths); ++i) {
 		if (!strncmp(pathname, paths[i], strlen(paths[i]))) {
@@ -253,7 +253,6 @@ static bool is_dmverity_prebuit_path(const struct file *file)
 		}
 	}
 
-exit:
 	if (pathbuf)
 		__putname(pathbuf);
 

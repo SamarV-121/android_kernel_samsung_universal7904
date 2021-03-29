@@ -163,4 +163,6 @@ static inline void mfc_change_idle_mode(struct s5p_mfc_dev *dev,
 	if (dev->idle_mode == MFC_IDLE_MODE_NONE)
 		mfc_idle_checker_start_tick(dev);
 }
+void s5p_mfc_cleanup_vbindex(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_dec_vb_index_info(struct s5p_mfc_ctx *ctx, struct s5p_mfc_buf *buf);
 #endif /* __S5P_MFC_UTILS_H */
