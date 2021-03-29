@@ -870,39 +870,6 @@ void sec_debug_summary_set_reserved_out_buf(unsigned long buf, unsigned long siz
 	reserved_out_size = size;
 }
 
-static int __init sec_summary_log_setup(char *str)
-{
-	unsigned long size = memparse(str, &str);
-	unsigned long base = 0;
-
-	/* If we encounter any problem parsing str ... */
-	if (!size || *str != '@' || kstrtoul(str + 1, 0, &base)) {
-		pr_err("%s: failed to parse address.\n", __func__);
-		goto out;
-	}
-
-	last_summary_size = size;
-
-#ifdef CONFIG_NO_BOOTMEM
-	if (memblock_is_region_reserved(base, size) || memblock_reserve(base, size)) {
-#else
-	if (reserve_bootmem(base, size, BOOTMEM_EXCLUSIVE)) {
-#endif
-		pr_err("%s: failed to reserve size:0x%lx at base 0x%lx\n", __func__, size, base);
-		goto out;
-	}
-
-	pr_info("%s, base:0x%lx size:0x%lx\n", __func__, base, size);
-
-	sec_summary_log_buf = phys_to_virt(base);
-	sec_summary_log_size = round_up(sizeof(struct sec_debug_summary), PAGE_SIZE);
-	last_summary_buffer = phys_to_virt(base + sec_summary_log_size);
-	sec_debug_summary_set_reserved_out_buf(base + sec_summary_log_size, (size - sec_summary_log_size));
-out:
-	return 0;
-}
-__setup("sec_summary_log=", sec_summary_log_setup);
-
 int sec_debug_summary_init(void)
 {
 	int offset = 0;
@@ -999,5 +966,66 @@ int sec_debug_save_panic_info(const char *str, unsigned long caller)
 
 	return 0;
 }
-#endif /* CONFIG_SEC_DUMP_SUMMARY */
 
+static int __init sec_summary_log_setup(char *str)
+{
+	unsigned long size = memparse(str, &str);
+	unsigned long base = 0;
+
+	/* If we encounter any problem parsing str ... */
+	if (!size || *str != '@' || kstrtoul(str + 1, 0, &base)) {
+		pr_err("%s: failed to parse address.\n", __func__);
+		goto out;
+	}
+
+	last_summary_size = size;
+
+#ifdef CONFIG_NO_BOOTMEM
+	if (memblock_is_region_reserved(base, size) || memblock_reserve(base, size)) {
+#else
+	if (reserve_bootmem(base, size, BOOTMEM_EXCLUSIVE)) {
+#endif
+		pr_err("%s: failed to reserve size:0x%lx at base 0x%lx\n", __func__, size, base);
+		goto out;
+	}
+
+	pr_info("%s, base:0x%lx size:0x%lx\n", __func__, base, size);
+
+	sec_summary_log_buf = phys_to_virt(base);
+	sec_summary_log_size = round_up(sizeof(struct sec_debug_summary), PAGE_SIZE);
+	last_summary_buffer = phys_to_virt(base + sec_summary_log_size);
+	sec_debug_summary_set_reserved_out_buf(base + sec_summary_log_size, (size - sec_summary_log_size));
+out:
+	return 0;
+}
+__setup("sec_summary_log=", sec_summary_log_setup);
+#elif defined(CONFIG_SEC_DEBUG_SMALL_DEBUG_MODE)
+/* need to reserve dump summary area to prevent to corrupt kernel dump
+ * this reserved memory will not be used in kernel
+ */
+static int __init sec_summary_log_setup(char *str)
+{
+	unsigned long size = memparse(str, &str);
+	unsigned long base = 0;
+
+	/* If we encounter any problem parsing str ... */
+	if (!size || *str != '@' || kstrtoul(str + 1, 0, &base)) {
+		pr_err("%s: failed to parse address.\n", __func__);
+		goto out;
+	}
+
+#ifdef CONFIG_NO_BOOTMEM
+	if (memblock_is_region_reserved(base, size) || memblock_reserve(base, size)) {
+#else
+	if (reserve_bootmem(base, size, BOOTMEM_EXCLUSIVE)) {
+#endif
+		pr_err("%s: failed to reserve size:0x%lx at base 0x%lx\n", __func__, size, base);
+		goto out;
+	}
+
+	pr_info("%s: base:0x%lx size:0x%lx\n", __func__, base, size);
+out:
+	return 0;
+}
+__setup("sec_summary_log=", sec_summary_log_setup);
+#endif

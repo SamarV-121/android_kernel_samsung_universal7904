@@ -212,7 +212,7 @@ obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
 obj-$(CONFIG_UH) 		+= uh/
 
 # FIVE TEE driver
-obj-$(CONFIG_FIVE_TEE_DRIVER)	+= five/
+obj-$(CONFIG_FIVE_TEE_DRIVER)	+= security/samsung/five_tee_driver/
 obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
 
 # streamline
@@ -222,3 +222,6 @@ endif
 
 # GNSS
 obj-$(CONFIG_GPS_BCM4753)	+= gps/
+
+#TZIC
+obj-y  += security/samsung/tzic/

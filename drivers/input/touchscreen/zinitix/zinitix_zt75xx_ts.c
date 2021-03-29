@@ -1319,10 +1319,12 @@ static bool ts_read_coord(struct bt532_ts_info *info)
 				input_report_key(info->input_dev, KEY_WAKEUP, 0);
 				input_sync(info->input_dev);
 				/* request from sensor team */
-				input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM2, 1);
-				input_sync(info->input_dev_proximity);
-				input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM2, 0);
-				input_sync(info->input_dev_proximity);
+				if (info->pdata->support_ear_detect) {
+					input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM2, 1);
+					input_sync(info->input_dev_proximity);
+					input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM2, 0);
+					input_sync(info->input_dev_proximity);
+				}
 
 				input_info(true, &client->dev, "AOT Doubletab\n");
 			} else {
@@ -3404,6 +3406,15 @@ static void fw_update(void *device_data)
 	int ret;
 
 	sec_cmd_set_default_result(sec);
+#if defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	if (sec->cmd_param[0] == 1) {
+		sec->cmd_state = 2;
+		snprintf(result, sizeof(result) , "%s", "OK");
+		sec_cmd_set_cmd_result(sec, result, strnlen(result, sizeof(result)));
+		input_info(true, &client->dev, "%s: user_ship, success\n", __func__);
+		return;
+	}
+#endif
 
 	switch (sec->cmd_param[0]) {
 	case BUILT_IN:

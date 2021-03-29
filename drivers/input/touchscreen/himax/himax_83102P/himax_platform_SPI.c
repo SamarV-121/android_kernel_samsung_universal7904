@@ -1026,6 +1026,15 @@ static int tsp_vbus_notification(struct notifier_block *nb,
 }
 #endif
 
+unsigned int hx_bootmode;
+static int __init get_bootmode(char *arg)
+{
+	get_option(&arg, &hx_bootmode);
+
+	return 0;
+}
+early_param("bootmode", get_bootmode);
+
 int himax_chip_common_probe(struct spi_device *spi)
 {
 	struct himax_ts_data *ts;
@@ -1037,6 +1046,12 @@ int himax_chip_common_probe(struct spi_device *spi)
 		dev_err(&spi->dev,
 				"%s: Full duplex not supported by host\n", __func__);
 		return -EIO;
+	}
+
+	if (hx_bootmode == 2) {
+		input_info(true, &spi->dev, "%s : Do not load driver due to : device entered recovery mode %d\n",
+			__func__, hx_bootmode);
+		return -ENODEV;
 	}
 
 	gBuffer = kzalloc(sizeof(uint8_t) * HX_MAX_WRITE_SZ, GFP_KERNEL);

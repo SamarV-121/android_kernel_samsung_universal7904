@@ -52,6 +52,7 @@
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
+/* @fs.sec -- c4d165e8cb5ea1cc14cdedb9eab23efd642d4d5f -- */
 static unsigned int sys_umount_trace_status;
 
 static unsigned int m_hash_mask __read_mostly;
@@ -144,11 +145,28 @@ enum {
 };
 
 static const char *umount_exit_str[UMOUNT_STATUS_MAX] = {
-	"ADDED_TASK", "REMAIN_NS", "REMAIN_CNT", "DELAY_TASK"};
+	"ADDED_TASK", "REMAIN_NS", "REMAIN_CNT", "DELAY_TASK"
+};
+
+static const char *exception_process[] = {
+	"main", "ch_zygote", "usap32", "usap64", NULL,
+};
 
 static inline void sys_umount_trace_set_status(unsigned int status)
 {
 	sys_umount_trace_status = status;
+}
+
+static inline int is_exception(char *comm)
+{
+	unsigned int idx = 0;
+
+	do {
+		if (!strcmp(comm, exception_process[idx]))
+			return 1;
+	} while (exception_process[++idx]);
+
+	return 0;
 }
 
 static inline void sys_umount_trace_print(struct mount *mnt, int flags)
@@ -163,7 +181,7 @@ static inline void sys_umount_trace_print(struct mount *mnt, int flags)
 	/* We don`t want to see what zygote`s umount */
 	if (((sb->s_magic == SDFAT_SUPER_MAGIC) ||
 		(sb->s_magic == MSDOS_SUPER_MAGIC)) &&
-		((current_uid().val == 0) && (strcmp(current->comm, "main")))) {
+		((current_uid().val == 0) && !is_exception(current->comm))) {
 		struct block_device *bdev = sb->s_bdev;
 		dev_t bd_dev = bdev ? bdev->bd_dev : 0;
 

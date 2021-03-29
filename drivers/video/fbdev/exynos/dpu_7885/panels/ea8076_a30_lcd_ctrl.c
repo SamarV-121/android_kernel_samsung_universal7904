@@ -25,6 +25,9 @@
 #include "mdnie.h"
 #include "ea8076_m30_mdnie.h"
 #endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+#include "ea8076_a30_poc.h"
+#endif
 
 #if defined(CONFIG_DISPLAY_USE_INFO)
 #include "dpui.h"
@@ -119,6 +122,11 @@ struct lcd_info {
 
 #if defined(CONFIG_DISPLAY_USE_INFO)
 	struct notifier_block		dpui_notif;
+#endif
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	struct panel_poc_device 	poc_dev;
+	unsigned char			poc_mca[LDI_LEN_MCA_CHECK];
 #endif
 
 #if defined(CONFIG_EXYNOS_DOZE)
@@ -389,7 +397,7 @@ static int ea8076_read_id(struct lcd_info *lcd)
 		priv->lcdconnected = lcd->connected = 0;
 		dev_info(&lcd->ld->dev, "%s: connected lcd is invalid\n", __func__);
 
-		if (!lcdtype && decon)
+		if (lcdtype && decon)
 			decon_abd_save_bit(&decon->abd, BITS_PER_BYTE * LDI_LEN_ID, cpu_to_be32(lcd->id_info.value), LDI_BIT_DESC_ID);
 	}
 
@@ -605,6 +613,22 @@ static int ea8076_read_rddsm(struct lcd_info *lcd)
 
 	return ret;
 }
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static int ea8076_read_mca_check(struct lcd_info *lcd)
+{
+	int ret = 0;
+	unsigned char buf[LDI_LEN_MCA_CHECK] = {0, };
+
+	ret = dsim_read_info(lcd, LDI_REG_MCA_CHECK, LDI_LEN_MCA_CHECK, buf);
+	if (ret < 0)
+		dev_info(&lcd->ld->dev, "%s: fail\n", __func__);
+
+	memcpy(lcd->poc_mca, buf, LDI_LEN_MCA_CHECK);
+
+	return ret;
+}
+#endif
 
 static int ea8076_read_init_info(struct lcd_info *lcd)
 {
@@ -876,6 +900,14 @@ static int ea8076_probe(struct lcd_info *lcd)
 	ret = ea8076_read_init_info(lcd);
 	if (ret < 0)
 		dev_info(&lcd->ld->dev, "%s: failed to init information\n", __func__);
+
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	lcd->poc_dev.dsim = lcd->dsim;
+	lcd->poc_dev.lock = &lcd->lock;
+	ret = panel_poc_probe(&lcd->poc_dev);
+	if (ret)
+		dev_err(&lcd->ld->dev, "%s : failed to probe poc_device", __func__);
+#endif
 
 	dsim_panel_set_brightness(lcd, 1);
 
@@ -1218,17 +1250,19 @@ static ssize_t xtalk_mode_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct lcd_info *lcd = dev_get_drvdata(dev);
-	unsigned int value;
-	int ret;
-
-	if (lcd->state != PANEL_STATE_RESUMED)
-		return -EINVAL;
+	unsigned int value = 0;
+	int ret = 0;
 
 	ret = kstrtouint(buf, 0, &value);
 	if (ret < 0)
 		return ret;
 
 	dev_info(&lcd->ld->dev, "%s: %d\n", __func__, value);
+
+	if (lcd->state != PANEL_STATE_RESUMED) {
+		dev_info(&lcd->ld->dev, "%s: state is %d\n", __func__, lcd->state);
+		return -EINVAL;
+	}
 
 	mutex_lock(&lcd->lock);
 	if (value == 1) {
@@ -1266,7 +1300,7 @@ static ssize_t enable_fd_store(struct device *dev,
 	dev_info(&lcd->ld->dev, "%s: %d\n", __func__, value);
 
 	mutex_lock(&lcd->lock);
-	decon_abd_pin_enable(decon, 0);
+	decon_abd_enable(&decon->abd, 0);
 	if (value) {
 		DSI_WRITE(SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
 		DSI_WRITE(SEQ_GPARA_FD, ARRAY_SIZE(SEQ_GPARA_FD));
@@ -1279,7 +1313,7 @@ static ssize_t enable_fd_store(struct device *dev,
 		DSI_WRITE(SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
 	}
 	msleep(120);
-	decon_abd_pin_enable(decon, 1);
+	decon_abd_enable(&decon->abd, 1);
 	mutex_unlock(&lcd->lock);
 
 	return size;
@@ -1356,6 +1390,7 @@ static ssize_t alpm_store(struct device *dev,
 	struct lcd_info *lcd = dev_get_drvdata(dev);
 	struct dsim_device *dsim = lcd->dsim;
 	struct decon_device *decon = get_decon_drvdata(0);
+	struct fb_info *fbinfo = decon->win[decon->dt.dft_win]->fbinfo;
 	union lpm_info lpm = {0, };
 	unsigned int value = 0;
 	int ret;
@@ -1372,16 +1407,23 @@ static ssize_t alpm_store(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (!lock_fb_info(fbinfo)) {
+		dev_info(&lcd->ld->dev, "%s: fblock is failed\n", __func__);
+		return -EINVAL;
+	}
+
 	lpm.ver = get_bit(value, 16, 8);
 	lpm.mode = get_bit(value, 0, 8);
 
 	if (!lpm.ver && lpm.mode >= ALPM_MODE_MAX) {
 		dev_info(&lcd->ld->dev, "%s: undefined lpm value: %x\n", __func__, value);
+		unlock_fb_info(fbinfo);
 		return -EINVAL;
 	}
 
 	if (lpm.ver && lpm.mode >= AOD_MODE_MAX) {
 		dev_info(&lcd->ld->dev, "%s: undefined lpm value: %x\n", __func__, value);
+		unlock_fb_info(fbinfo);
 		return -EINVAL;
 	}
 
@@ -1392,7 +1434,7 @@ static ssize_t alpm_store(struct device *dev,
 	lcd->alpm = lpm;
 	mutex_unlock(&lcd->lock);
 
-	decon_abd_pin_enable(decon, 0);
+	decon_abd_enable(&decon->abd, 0);
 	switch (lpm.mode) {
 	case ALPM_OFF:
 		if (lcd->prev_brightness) {
@@ -1428,7 +1470,9 @@ static ssize_t alpm_store(struct device *dev,
 		mutex_unlock(&lcd->lock);
 		break;
 	}
-	decon_abd_pin_enable(decon, 1);
+	decon_abd_enable(&decon->abd, 1);
+
+	unlock_fb_info(fbinfo);
 
 	return size;
 }
@@ -1496,6 +1540,68 @@ static ssize_t alpm_show(struct device *dev,
 static DEVICE_ATTR(alpm, 0664, alpm_show, alpm_store);
 #endif
 
+#ifdef CONFIG_SUPPORT_POC_FLASH
+static ssize_t poc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+
+	return strlen(buf);
+}
+
+static ssize_t poc_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	struct panel_poc_device *poc_dev;
+	struct panel_poc_info *poc_info;
+	int ret;
+	unsigned int cmd, addr, len;
+
+	if (lcd->state != PANEL_STATE_RESUMED) {
+		dev_info(&lcd->ld->dev, "%s: panel state is %d\n", __func__, lcd->state);
+		return -EINVAL;
+	}
+
+	poc_dev = &lcd->poc_dev;
+	poc_info = &poc_dev->poc_info;
+
+	ret = sscanf(buf, "%8d %8d %8d\n", &cmd, &addr, &len);
+	if ((ret != 3) || (cmd != POC_OP_SECTOR_ERASE) || (len != POC_TOTAL_SIZE)) {
+		dev_info(&lcd->ld->dev, "%s: err! cmd: [%d] ret: [%d] len: [%d]\n", __func__, cmd, ret, len);
+		return ret;
+	}
+
+	if (cmd == POC_OP_SECTOR_ERASE)
+		poc_erase(poc_dev, addr, len);
+
+	dev_info(&lcd->ld->dev, "%s: poc_op %d\n", __func__, cmd);
+
+	return size;
+}
+
+static ssize_t poc_mca_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	int ret = 0;
+	int i = 0;
+
+	DSI_WRITE(SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
+	ea8076_read_mca_check(lcd);
+	DSI_WRITE(SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+
+	for (i = 0; i < LDI_LEN_MCA_CHECK; i++) {
+		dev_info(&lcd->ld->dev, "%s C4[%d]: 0x%02x\n", __func__, i, lcd->poc_mca[i]);
+		snprintf(buf, PAGE_SIZE, "%s%02X ", buf, lcd->poc_mca[i]);
+	}
+
+	return strlen(buf);
+}
+
+static DEVICE_ATTR(poc, 0664, poc_show, poc_store);
+static DEVICE_ATTR(poc_mca, 0444, poc_mca_show, NULL);
+#endif
+
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
 static DEVICE_ATTR(manufacture_code, 0444, manufacture_code_show, NULL);
@@ -1537,6 +1643,10 @@ static struct attribute *lcd_sysfs_attributes[] = {
 #if defined(CONFIG_DISPLAY_USE_INFO)
 	&dev_attr_dpui.attr,
 	&dev_attr_dpui_dbg.attr,
+#endif
+#ifdef CONFIG_SUPPORT_POC_FLASH
+	&dev_attr_poc.attr,
+	&dev_attr_poc_mca.attr,
 #endif
 	NULL,
 };
