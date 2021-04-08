@@ -2123,23 +2123,25 @@ int fimc_is_group_stop(struct fimc_is_groupmgr *groupmgr,
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
+	BUG_ON(!group->head);
 	BUG_ON(!group->device);
 	BUG_ON(!group->leader.vctx);
 	BUG_ON(group->instance >= FIMC_IS_STREAM_COUNT);
 	BUG_ON(group->id >= GROUP_ID_MAX);
 
-	if (!test_bit(FIMC_IS_GROUP_START, &group->state)) {
-		mwarn("already group stop", group);
-		return -EPERM;
-	}
+	device = group->device;
 	head = group->head;
-	if (head && !test_bit(FIMC_IS_GROUP_START, &head->state)) {
-		mwarn("already head group stop", group);
-		return -EPERM;
-	}
+	gtask = &groupmgr->gtask[head->id];
+	sensor = device->sensor;
 	framemgr = GET_HEAD_GROUP_FRAMEMGR(group);
 	if (!framemgr) {
 		mgerr("framemgr is NULL", group, group);
+		goto p_err;
+	}
+
+	if (!test_bit(FIMC_IS_GROUP_START, &group->state) &&
+		!test_bit(FIMC_IS_GROUP_START, &group->head->state)) {
+		mwarn("already group stop", group);
 		goto p_err;
 	}
 
@@ -2147,15 +2149,12 @@ int fimc_is_group_stop(struct fimc_is_groupmgr *groupmgr,
 		set_bit(FIMC_IS_GROUP_FORCE_STOP, &group->state);
 		clear_bit(FIMC_IS_GROUP_REQUEST_FSTOP, &group->state);
 	}
-	gtask = &groupmgr->gtask[head->id];
-	device = group->device;
 
 	retry = 150;
 	while (--retry && framemgr->queued_count[FS_REQUEST]) {
 		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state) &&
 			!list_empty(&head->smp_trigger.wait_list)) {
 
-			sensor = device->sensor;
 			if (!sensor) {
 				mwarn(" sensor is NULL, forcely trigger(pc %d)", device, head->pcount);
 				set_bit(FIMC_IS_GROUP_FORCE_STOP, &head->state);
