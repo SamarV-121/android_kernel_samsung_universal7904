@@ -2,6 +2,7 @@
 
 green="\033[01;32m"
 nocol="\033[0m"
+PLATFORM=universal7904
 
 export KBUILD_BUILD_USER="SamarV-121"
 export CROSS_COMPILE="$HOME/toolchains/arm64-gcc-4.9/bin/aarch64-linux-android-"
@@ -9,14 +10,12 @@ export CROSS_COMPILE_ARM32="$HOME/toolchains/arm32-gcc-4.9/bin/arm-linux-android
 DEVICES=(m20lte m30lte a30 a30s a40)
 KERNEL_DIR="$PWD"
 KERNEL_IMAGE="$KERNEL_DIR/out/arch/arm64/boot/Image"
-AK3_DIR="$HOME/tools/AnyKernel"
-ZIPNAME="FuseKernel-test-$(git rev-parse --short HEAD)-$(date -u +%Y%m%d_%H%M)-universal7904.zip"
+AK3_DIR="$HOME/tools/AnyKernel/$PLATFORM"
+ZIPNAME="FuseKernel-test-$(git rev-parse --short HEAD)-$(date -u +%Y%m%d_%H%M)-$PLATFORM.zip"
 
 [ -e "$HOME/toolchains/arm64-gcc-4.9" ] || git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 "$HOME/toolchains/arm64-gcc-4.9"
 [ -e "$HOME/toolchains/arm32-gcc-4.9" ] || git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 "$HOME/toolchains/arm32-gcc-4.9"
-[ -e "$AK3_DIR" ] || git clone --depth=1 https://github.com/osm0sis/AnyKernel3 "$AK3_DIR"
-
-git -C "$AK3_DIR" reset --hard && git -C "$AK3_DIR" clean -df && curl -s https://gist.githubusercontent.com/SamarV-121/24aecb5e1fad9ca5dcfa6bb86a2f9cda/raw >"$AK3_DIR/anykernel.sh"
+[ -e "$AK3_DIR" ] || git clone --depth=1 https://github.com/SamarV-121/AnyKernel3 -b "$PLATFORM" "$AK3_DIR"
 
 for DEVICE in "${DEVICES[@]}"; do
 
@@ -33,4 +32,4 @@ for DEVICE in "${DEVICES[@]}"; do
 done
 
 cd "$AK3_DIR"
-zip -r "$ZIPNAME" *
+zip -r "$ZIPNAME" * -x "*.zip"
