@@ -58,29 +58,6 @@
 		};
 	};
 
-	firmware {
-		android {
-			compatible = "android,firmware";
-			fstab {
-				compatible = "android,fstab";
-				system {
-					compatible = "android,system";
-					dev = "/dev/block/platform/13500000.dwmmc0/by-name/SYSTEM";
-					type = "ext4";
-					mnt_flags = "ro";
-					fsmgr_flags = "wait";
-				};
-				vendor {
-					compatible = "android,vendor";
-					dev = "/dev/block/platform/13500000.dwmmc0/by-name/VENDOR";
-					type = "ext4";
-					mnt_flags = "ro";
-					fsmgr_flags = "wait,verify";
-				};
-			};
-		};
-	};
-
 	/* USI MODE SETTINGS
 	 * usi_mode = "hsi2c0" or "hsi2c1" or "spi" or "uart"
 	 * or "hsi2c0_hsi2c1" or "uart_hsi2c1"
