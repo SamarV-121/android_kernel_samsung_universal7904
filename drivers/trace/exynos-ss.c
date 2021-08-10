@@ -359,6 +359,7 @@ struct exynos_ss_log {
 #endif
 };
 
+#ifdef CONFIG_TRACING_SUPPORT
 #define ESS_SAVE_STACK_TRACE_CPU(xxx)					\
 	do {								\
 		struct stack_trace t = {				\
@@ -380,6 +381,7 @@ struct exynos_ss_log {
 		};							\
 		save_stack_trace(&t);					\
 	} while (0)
+#endif
 
 struct exynos_ss_log_idx {
 	atomic_t task_log_idx[ESS_NR_CPUS];
