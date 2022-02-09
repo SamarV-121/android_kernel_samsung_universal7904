@@ -464,6 +464,29 @@
 		io-channel-names = "adc-temp", "adc-in-bat";
 		#io-channel-cells = <5>;
 		io-channel-ranges;
+
+		battery,ttf_hv_charge_current = <1900>;
+		battery,ttf_capacity = <4100>;
+		battery,cv_data = <
+			2239	851	1915
+			2112	859	1846
+			2054	871	1799
+			1938	873	1730
+			1850	878	1657
+			1752	886	1585
+			1643	893	1501
+			1551	899	1428
+			1448	909	1307
+			1339	917	1199
+			1240	923	1114
+			1140	932	969
+			1040	939	838
+			935	952	677
+			839	955	520
+			751	967	313
+			644	986	74
+			598	1000	0
+			>;
 	};
 
 /* sec_battery_cable
