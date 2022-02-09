@@ -96,6 +96,10 @@ if MALI_TMIX_R19P0
 source "drivers/gpu/arm/b_r19p0/Kconfig"
 endif
 
+if MALI_TMIX_R25P1
+source "drivers/gpu/arm/b_r25p1/Kconfig"
+endif
+
 if MALI_TMIX_R26P0
 source "drivers/gpu/arm/b_r26p0/Kconfig"
 endif
