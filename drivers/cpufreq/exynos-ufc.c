@@ -520,6 +520,35 @@ static ssize_t store_execution_mode_change(struct kobject *kobj, struct kobj_att
 	return count;
 }
 
+#ifdef CONFIG_ACPM_DVFS
+static ssize_t store_update_dvfs_table(struct kobject *kobj, struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	unsigned int dvfs_id, freq, voltage;
+
+	if (sscanf(buf, "%u %u %u", &dvfs_id, &freq, &voltage) == 3) {
+		fvmap_change_voltage(dvfs_id, freq, voltage);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t store_print_dvfs_table(struct kobject *kobj, struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	if (sysfs_streq(buf, "1") || sysfs_streq(buf, "true")) {
+		/* While not its main purpose, fvmap_copy_from_sram()
+		   prints DVFS tables while performing its main
+		   intended function */
+		fvmap_copy_from_sram(map_base, sram_base, NULL);
+		return count;
+	}
+
+	return -EINVAL;
+}
+#endif
+
 static struct kobj_attribute cpufreq_table =
 __ATTR(cpufreq_table, 0444, show_cpufreq_table, NULL);
 static struct kobj_attribute cpufreq_min_limit =
@@ -534,6 +563,14 @@ __ATTR(cpufreq_max_limit, 0644,
 static struct kobj_attribute execution_mode_change =
 __ATTR(execution_mode_change, 0644,
 		show_execution_mode_change, store_execution_mode_change);
+#ifdef CONFIG_ACPM_DVFS
+static struct kobj_attribute print_dvfs_table =
+__ATTR(print_dvfs_table, 0600,
+		NULL, store_print_dvfs_table);
+static struct kobj_attribute update_dvfs_table =
+__ATTR(update_dvfs_table, 0600,
+		NULL, store_update_dvfs_table);
+#endif
 
 static __init void init_sysfs(void)
 {
@@ -552,6 +589,13 @@ static __init void init_sysfs(void)
 	if (sysfs_create_file(power_kobj, &execution_mode_change.attr))
 		pr_err("failed to create cpufreq_max_limit node\n");
 
+#ifdef CONFIG_ACPM_DVFS
+	if (sysfs_create_file(power_kobj, &print_dvfs_table.attr))
+		pr_err("failed to create print_dvfs_table node\n");
+
+	if (sysfs_create_file(power_kobj, &update_dvfs_table.attr))
+		pr_err("failed to create update_dvfs_table node\n");
+#endif
 }
 
 static int parse_ufc_ctrl_info(struct exynos_cpufreq_domain *domain,

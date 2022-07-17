@@ -44,7 +44,7 @@ struct dvfs_table {
 };
 
 #ifdef CONFIG_ACPM_DVFS
-extern int fvmap_init(void __iomem *sram_base);
+extern int fvmap_init(void __iomem *_sram_base);
 extern int fvmap_get_voltage_table(unsigned int id, unsigned int *table);
 #else
 static inline int fvmap_init(phys_addr_t phys_addr)

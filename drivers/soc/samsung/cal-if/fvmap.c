@@ -14,6 +14,9 @@
 #define FVMAP_SIZE		(SZ_8K)
 #define STEP_UV			(6250)
 
+void __iomem *map_base;
+void __iomem *sram_base;
+
 void __iomem *fvmap_base;
 void __iomem *sram_fvmap_base;
 
@@ -259,7 +262,9 @@ static void check_percent_margin(struct rate_volt_header *head, unsigned int num
 	}
 }
 
-static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
+void fvmap_copy_from_sram(void __iomem *map_base,
+			  void __iomem *sram_base,
+			  unsigned int requested_voltage_change[3])
 {
 	struct fvmap_header *fvmap_header, *header;
 	struct rate_volt_header *old, *new;
@@ -299,10 +304,14 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 		vclk = cmucal_get_node(ACPM_VCLK_TYPE | i);
 		if (vclk == NULL)
 			continue;
-		pr_info("dvfs_type : %s - id : %x\n",
-			vclk->name, fvmap_header[i].dvfs_type);
-		pr_info("  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
-		pr_info("  num_of_members : %d\n", fvmap_header[i].num_of_members);
+		/* While this info is useful to gather initially, don't spam the
+		   kernel log with it on single voltage changes */
+		if (!requested_voltage_change) {
+			pr_info("dvfs_type : %s - id : %x\n",
+				vclk->name, fvmap_header[i].dvfs_type);
+			pr_info("  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
+			pr_info("  num_of_members : %d\n", fvmap_header[i].num_of_members);
+		}
 
 		old = sram_base + fvmap_header[i].o_ratevolt;
 		new = map_base + fvmap_header[i].o_ratevolt;
@@ -314,11 +323,20 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 			cal_dfs_set_volt_margin(i | ACPM_VCLK_TYPE, margin);
 
 		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
+			/* If a voltage change has been requested,
+			   update the appropriate voltage table with it */
+			if (requested_voltage_change)
+				if ((fvmap_header[i].dvfs_type == requested_voltage_change[0]) &&
+				    (old->table[j].rate == requested_voltage_change[1]))
+					old->table[j].volt = requested_voltage_change[2];
+
 			new->table[j].rate = old->table[j].rate;
 			new->table[j].volt = old->table[j].volt;
-			pr_info("  lv : [%7d], volt = %d uV (%d %%) \n",
-				new->table[j].rate, new->table[j].volt,
-				volt_offset_percent);
+
+			if (!requested_voltage_change)
+				pr_info("  lv : [%7d], volt = %d uV (%d %%) \n",
+					new->table[j].rate, new->table[j].volt,
+					volt_offset_percent);
 		}
 
 		for (j = 0; j < fvmap_header[i].num_of_pll; j++) {
@@ -340,16 +358,41 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 	}
 }
 
-int fvmap_init(void __iomem *sram_base)
-{
-	void __iomem *map_base;
+void fvmap_change_voltage(unsigned int dvfs_id,
+			  unsigned int freq, unsigned int voltage) {
+	/* Will be set with the passed info for a voltage change, then
+	   passed to fvmap_copy_from_sram() to perform the actual change */
+	unsigned int requested_voltage_change[3];
 
+	/* The voltage regulators work in steps of 6250 uV, so all
+	   voltages must be divisible by 6250. */
+	if ((voltage % 6250) != 0) {
+		pr_info("%s: dvfs id %x: invalid voltage change requested "
+			"for freq %u kHz - Voltage %u uV invalid as not "
+			"divisible by 6250 uV - Rounding down\n",
+			__func__, dvfs_id, freq, voltage);
+		voltage -= voltage % 6250;
+	}
+
+	/* Performing the voltage change */
+	requested_voltage_change[0] = dvfs_id;
+	requested_voltage_change[1] = freq;
+	requested_voltage_change[2] = voltage;
+	fvmap_copy_from_sram(map_base, sram_base, requested_voltage_change);
+	pr_info("%s: dvfs id %x: changed voltage for freq"
+		" %u kHz to %u uV successfully\n",
+		__func__, dvfs_id, freq, voltage);
+}
+
+int fvmap_init(void __iomem *_sram_base)
+{
+	sram_base = _sram_base;
 	map_base = kzalloc(FVMAP_SIZE, GFP_KERNEL);
 
 	fvmap_base = map_base;
 	sram_fvmap_base = sram_base;
-	pr_info("%s:fvmap initialize %pK\n", __func__, sram_base);
-	fvmap_copy_from_sram(map_base, sram_base);
+	pr_info("%s: fvmap initialized %pK\n", __func__, sram_base);
+	fvmap_copy_from_sram(map_base, sram_base, NULL);
 
 	return 0;
 }
