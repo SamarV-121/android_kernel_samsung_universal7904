@@ -1,5 +1,7 @@
+menu "Android ramdisk loader"
+
 config ANDROID_SAR_RAMDISK
-	bool
+	bool "Load ramdisk from boot.img"
 	default n
 	help
 	  Support for loading a ramdisk from a
@@ -14,3 +16,5 @@ config ANDROID_BOOT_PARTITION
 	default "/dev/block/mmcblk0p15"
 
 endif
+
+endmenu
