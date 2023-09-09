@@ -953,7 +953,7 @@ static int dualsense_get_calibration_data(struct dualsense *ds)
 		return -ENOMEM;
 
 	ret = ps_get_report(ds->base.hdev, DS_FEATURE_REPORT_CALIBRATION, buf,
-			DS_FEATURE_REPORT_CALIBRATION_SIZE, true);
+			DS_FEATURE_REPORT_CALIBRATION_SIZE, false);
 	if (ret) {
 		hid_err(ds->base.hdev, "Failed to retrieve DualSense calibration info: %d\n", ret);
 		goto err_free;
@@ -1799,7 +1799,7 @@ static int dualshock4_get_calibration_data(struct dualshock4 *ds4)
 			return -ENOMEM;
 
 		ret = ps_get_report(hdev, DS4_FEATURE_REPORT_CALIBRATION_BT, buf,
-				DS4_FEATURE_REPORT_CALIBRATION_BT_SIZE, true);
+				DS4_FEATURE_REPORT_CALIBRATION_BT_SIZE, false);
 		if (ret) {
 			hid_err(hdev, "Failed to retrieve DualShock4 calibration info: %d\n", ret);
 			goto err_free;
