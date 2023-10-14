@@ -1,3 +1,6 @@
+dtbo-$(CONFIG_EXYNOS7904_A40_EUR_OPEN) += \
+	exynos/dtbo/exynos7904-a40_eur_open_00.dtbo \
+	exynos/dtbo/exynos7904-a40_eur_open_01.dtbo
 dtb-$(CONFIG_EXYNOS7904_M20LTE_SWA_OPEN) += exynos/exynos7904-m20lte_swa_open_04.dtb
 dtb-$(CONFIG_EXYNOS7904_M30LTE_SWA_OPEN) += \
 	exynos/exynos7904-m30lte_swa_open_00.dtb \
