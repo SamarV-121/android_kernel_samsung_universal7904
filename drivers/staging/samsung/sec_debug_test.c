@@ -498,7 +498,7 @@ static void simulate_OVERFLOW(char *arg)
 	recursive_loop(100);
 }
 
-int sec_debug_force_error(const char *val, struct kernel_param *kp)
+int sec_debug_force_error(const char *val, const struct kernel_param *kp)
 {
 	int i;
 	char *temp;
