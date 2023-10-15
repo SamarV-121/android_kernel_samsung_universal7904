@@ -62,33 +62,6 @@
 				};
 			};
 
-			firmware {
-				android {
-					compatible = "android,firmware";
-					vbmeta {
-						compatible = "android,vbmeta";
-						parts = "vbmeta,boot,recovery,system,vendor,product,dtb,dtbo";
-					};
-					fstab {
-						compatible = "android,fstab";
-						vendor {
-							compatible = "android,vendor";
-							dev = "/dev/block/platform/13500000.dwmmc0/by-name/vendor";
-							type = "ext4";
-							mnt_flags = "ro";
-							fsmgr_flags = "wait,verify,avb";
-						};
-						product {
-							compatible = "android,product";
-							dev = "/dev/block/platform/13500000.dwmmc0/by-name/product";
-							type = "ext4";
-							mnt_flags = "ro";
-							fsmgr_flags = "wait,verify,avb";
-						};
-					};
-				};
-			};
-
 			but_zones: but_zones {
 				#list-but-cells = <3>;
 			};
