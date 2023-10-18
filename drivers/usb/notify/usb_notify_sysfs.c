@@ -4,7 +4,7 @@
  * Copyright (C) 2015-2017 Samsung, Inc.
  * Author: Dongrak Shin <dongrak.shin@samsung.com>
  *
-*/
+ */
 
  /* usb notify layer v3.1 */
 
@@ -211,6 +211,74 @@ error:
 	return ret;
 }
 
+static ssize_t usb_data_enabled_show(
+	struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+
+	pr_info("read usb_data_enabled %lu\n", udev->usb_data_enabled);
+	return sprintf(buf, "%lu\n", udev->usb_data_enabled);
+}
+
+static ssize_t usb_data_enabled_store(
+		struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct usb_notify_dev *udev = (struct usb_notify_dev *)
+		dev_get_drvdata(dev);
+	size_t ret = -ENOMEM;
+	int sret = -EINVAL;
+	int param = 0;
+	char *usb_data_enabled;
+
+	if (size > PAGE_SIZE) {
+		pr_err("%s size(%zu) is too long.\n", __func__, size);
+		goto error;
+	}
+
+	usb_data_enabled = kzalloc(size+1, GFP_KERNEL);
+	if (!usb_data_enabled)
+		goto error;
+
+	sret = sscanf(buf, "%s", usb_data_enabled);
+	if (sret != 1)
+		goto error1;
+
+	if (udev->set_disable) {
+		if (strcmp(usb_data_enabled, "0") == 0) {
+			if (!udev->usb_data_enabled) {
+				pr_err("%s already disabled", __func__);
+				goto error1;
+			}
+			param = NOTIFY_BLOCK_TYPE_ALL;
+			udev->usb_data_enabled = 0;
+		} else if (strcmp(usb_data_enabled, "1") == 0) {
+			if (udev->usb_data_enabled) {
+				pr_err("%s already enabled", __func__);
+				goto error1;
+			}
+			param = NOTIFY_BLOCK_TYPE_NONE;
+			udev->usb_data_enabled = 1;
+		} else {
+			pr_err("%s usb_data_enabled(%s) error.\n",
+				__func__, usb_data_enabled);
+			goto error1;
+		}
+		pr_info("%s usb_data_enabled=%s\n",
+			__func__, usb_data_enabled);
+			udev->set_disable(udev, param);
+		ret = size;
+	} else {
+		pr_err("%s set_disable func is NULL\n", __func__);
+	}
+error1:
+	kfree(usb_data_enabled);
+error:
+	return ret;
+}
+
 static ssize_t support_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -350,7 +418,7 @@ static ssize_t usb_hw_param_store(
 		dev_get_drvdata(dev);
 	struct otg_notify *n = udev->o_notify;
 	unsigned long long prev_hw_param[USB_CCIC_HW_PARAM_MAX] = {0, };
-
+	unsigned long long *p_param = NULL;
 	int index = 0;
 	size_t ret = -ENOMEM;
 	char *token, *str = (char *)buf;
@@ -374,8 +442,11 @@ static ssize_t usb_hw_param_store(
 			goto error;
 	}
 
-	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++)
-		*(get_hw_param(n, index)) += prev_hw_param[index];
+	for (index = 0; index < (USB_CCIC_HW_PARAM_MAX - 1); index++) {
+		p_param = get_hw_param(n, index);
+		if (p_param)
+			*p_param += prev_hw_param[index];
+	}
 	pr_info("%s - ret : %zu\n", __func__, ret);
 error:
 	return ret;
@@ -463,6 +534,7 @@ static ssize_t hw_param_store(
 	int index = 0;
 	size_t ret = -ENOMEM;
 	char *str = (char *)buf;
+	unsigned long long *p_param = NULL;
 
 	if (size > 2) {
 		pr_err("%s size(%zu) is too long.\n", __func__, size);
@@ -471,8 +543,11 @@ static ssize_t hw_param_store(
 	ret = size;
 	pr_info("%s : %s\n", __func__, str);
 	if (!strncmp(str, "c", 1))
-		for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++)
-			*(get_hw_param(n, index)) = 0;
+		for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++) {
+			p_param = get_hw_param(n, index);
+			if (p_param)
+				*p_param = 0;
+		}
 error:
 	return ret;
 }
@@ -647,6 +722,8 @@ err:
 EXPORT_SYMBOL_GPL(usb_notify_dev_uevent);
 
 static DEVICE_ATTR(disable, 0664, disable_show, disable_store);
+static DEVICE_ATTR(usb_data_enabled, 0664,
+	usb_data_enabled_show, usb_data_enabled_store);
 static DEVICE_ATTR(support, 0444, support_show, NULL);
 static DEVICE_ATTR(otg_speed, 0444, otg_speed_show, NULL);
 static DEVICE_ATTR(whitelist_for_mdm, 0664,
@@ -658,6 +735,7 @@ static DEVICE_ATTR(hw_param, 0664, hw_param_show, hw_param_store);
 
 static struct attribute *usb_notify_attrs[] = {
 	&dev_attr_disable.attr,
+	&dev_attr_usb_data_enabled.attr,
 	&dev_attr_support.attr,
 	&dev_attr_otg_speed.attr,
 	&dev_attr_whitelist_for_mdm.attr,
@@ -702,6 +780,7 @@ int usb_notify_dev_register(struct usb_notify_dev *udev)
 		return PTR_ERR(udev->dev);
 
 	udev->disable_state = 0;
+	udev->usb_data_enabled = 1;
 	strncpy(udev->disable_state_cmd, "OFF",
 			sizeof(udev->disable_state_cmd)-1);
 	ret = sysfs_create_group(&udev->dev->kobj, &usb_notify_attr_grp);
