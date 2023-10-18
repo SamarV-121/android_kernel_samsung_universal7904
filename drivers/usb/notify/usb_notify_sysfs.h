@@ -7,8 +7,7 @@
  * (at your option) any later version.
  */
 
-  /* usb notify layer v3.0 */
-
+  /* usb notify layer v3.1 */
 
 #ifndef __LINUX_USB_NOTIFY_SYSFS_H__
 #define __LINUX_USB_NOTIFY_SYSFS_H__
@@ -42,6 +41,7 @@ struct usb_notify_dev {
 	struct device *dev;
 	struct otg_notify *o_notify;
 	int index;
+	unsigned long usb_data_enabled;
 	unsigned long disable_state;
 	char disable_state_cmd[MAX_DISABLE_STR_LEN];
 	int (*set_disable)(struct usb_notify_dev *, int);
