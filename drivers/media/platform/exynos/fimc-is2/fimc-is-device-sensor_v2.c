@@ -986,7 +986,12 @@ static int fimc_is_sensor_notify_by_fstr(struct fimc_is_device_sensor *device, v
 
 	hashkey = device->fcount % FIMC_IS_TIMESTAMP_HASH_KEY;
 	device->timestamp[hashkey] = fimc_is_get_timestamp();
+#if defined(CONFIG_EXYNOS7904_M20LTE_SWA_OPEN) \
+ || defined(CONFIG_EXYNOS7904_M30LTE_SWA_OPEN)
 	device->timestampboot[hashkey] = fimc_is_get_timestamp();
+#else
+	device->timestampboot[hashkey] = fimc_is_get_timestamp_boot();
+#endif
 
 #ifdef MEASURE_TIME
 #ifdef MONITOR_TIME
