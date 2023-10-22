@@ -106,7 +106,6 @@
 #define ESS_SIGN_ALIVE			0xFACE
 #define ESS_SIGN_DEAD			0xDEAD
 #define ESS_SIGN_PANIC			0xBABA
-#define ESS_SIGN_SAFE_FAULT		0xFAFA
 #define ESS_SIGN_NORMAL_REBOOT		0xCAFE
 #define ESS_SIGN_FORCE_REBOOT		0xDAFE
 
@@ -2165,22 +2164,6 @@ static struct notifier_block nb_reboot_block = {
 static struct notifier_block nb_panic_block = {
 	.notifier_call = exynos_ss_panic_handler,
 };
-
-void exynos_ss_panic_handler_safe(void)
-{
-	char text[SZ_32] = "safe panic handler occurred";
-	size_t len;
-
-	if (unlikely(!ess_base.enabled))
-		return;
-
-	len = strnlen(text, SZ_32);
-
-	exynos_ss_report_reason(ESS_SIGN_SAFE_FAULT);
-	exynos_ss_dump_panic(text, len);
-	s3c2410wdt_set_emergency_reset(1);
-
-}
 
 static size_t __init exynos_ss_remap(void)
 {

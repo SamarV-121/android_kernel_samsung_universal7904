@@ -70,10 +70,6 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
-#ifdef CONFIG_PAGE_BOOST_RECORDING
-#include <linux/io_record.h>
-#endif
-
 #include "internal.h"
 
 #if defined(LAST_CPUPID_NOT_IN_PAGE_FLAGS) && !defined(CONFIG_COMPILE_TEST)
@@ -2887,13 +2883,9 @@ void do_set_pte(struct vm_area_struct *vma, unsigned long address,
 	/* no need to invalidate: a not-present page won't be cached */
 	update_mmu_cache(vma, address, pte);
 }
-#ifdef CONFIG_FAULT_AROUND_4KB
-static unsigned long fault_around_bytes __read_mostly =
-	rounddown_pow_of_two(4096);
-#else
+
 static unsigned long fault_around_bytes __read_mostly =
 	rounddown_pow_of_two(65536);
-#endif
 
 #ifdef CONFIG_DEBUG_FS
 static int fault_around_bytes_get(void *data, u64 *val)
@@ -3020,10 +3012,6 @@ static int do_read_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		if (!pte_same(*pte, orig_pte))
 			goto unlock_out;
 		pte_unmap_unlock(pte, ptl);
-#ifdef CONFIG_PAGE_BOOST_RECORDING
-	} else if (vma->vm_ops->map_pages && fault_around_bytes >> PAGE_SHIFT == 1) {
-		record_io_info(vma->vm_file, pgoff, 1);
-#endif
 	}
 
 	ret = __do_fault(vma, address, pgoff, flags, NULL, &fault_page);

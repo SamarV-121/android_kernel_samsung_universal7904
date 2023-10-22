@@ -22,10 +22,6 @@
 #include <asm/memory.h>
 #include <asm/pgtable-hwdef.h>
 
-#ifdef CONFIG_UH_RKP
-#include <linux/uh.h>
-#include <linux/rkp.h>
-#endif
 /*
  * Software defined PTE bits definition.
  */
@@ -83,7 +79,6 @@ extern void __pgd_error(const char *file, int line, unsigned long val);
 #define PROT_NORMAL		(PROT_DEFAULT | PTE_PXN | PTE_UXN | PTE_DIRTY | PTE_WRITE | PTE_ATTRINDX(MT_NORMAL))
 
 #define PROT_SECT_DEVICE_nGnRE	(PROT_SECT_DEFAULT | PMD_SECT_PXN | PMD_SECT_UXN | PMD_ATTRINDX(MT_DEVICE_nGnRE))
-#define PROT_SECT_NORMAL_NC    (PROT_SECT_DEFAULT | PMD_SECT_PXN | PMD_SECT_UXN | PMD_ATTRINDX(MT_NORMAL_NC))
 #define PROT_SECT_NORMAL	(PROT_SECT_DEFAULT | PMD_SECT_PXN | PMD_SECT_UXN | PMD_ATTRINDX(MT_NORMAL))
 #define PROT_SECT_NORMAL_EXEC	(PROT_SECT_DEFAULT | PMD_SECT_UXN | PMD_ATTRINDX(MT_NORMAL))
 
@@ -109,13 +104,6 @@ extern void __pgd_error(const char *file, int line, unsigned long val);
 #define PAGE_COPY_EXEC		__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN)
 #define PAGE_READONLY		__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN | PTE_UXN)
 #define PAGE_READONLY_EXEC	__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN)
-
-#ifdef CONFIG_UH_RKP
-#define PTE_RKP_RO			(_AT(pteval_t, 1) << 57)
-#define PAGE_KERNEL_RKP_RO	__pgprot(PROT_NORMAL | PTE_RKP_RO)
-#define pgprot_rkp_ro(prot)	(!!(pgprot_val(prot) & (PTE_RKP_RO)))
-#define addr_rkp_ro(addr)	(!(addr & (PTE_RKP_RO)))
-#endif
 
 #define __P000  PAGE_NONE
 #define __P001  PAGE_READONLY
@@ -248,31 +236,8 @@ static inline pmd_t pmd_mkcont(pmd_t pmd)
 	return __pmd(pmd_val(pmd) | PMD_SECT_CONT);
 }
 
-#ifdef CONFIG_TIMA_LKMAUTH
-#ifdef CONFIG_TIMA_LKMAUTH_CODE_PROT
-static inline pte_t pte_mknexec(pte_t pte)
-{
-	pte_val(pte) |= PTE_PXN;
-	return pte;
-}
-#endif
-#endif
-
-#ifdef CONFIG_UH_RKP
-extern  int printk(const char *s, ...);
-extern void panic(const char *fmt, ...);
-#endif
 static inline void set_pte(pte_t *ptep, pte_t pte)
 {
-#ifdef CONFIG_UH_RKP
-	if (pte && rkp_is_pg_dbl_mapped((u64)(pte)) ) {
-		panic("RKP : Double mapping Detected pte = 0x%llx ptep = %p", (u64)pte, ptep);
-		return;
-	}
-	if (rkp_is_pg_protected((u64)ptep)) {
-		uh_call(UH_APP_RKP, RKP_WRITE_PGT3, (u64)ptep, pte_val(pte), 0, 0);
-	} else
-#endif /* CONFIG_UH_RKP */
 	*ptep = pte;
 
 	/*
@@ -434,8 +399,6 @@ static inline int has_transparent_hugepage(void)
 	__pgprot_modify(prot, PTE_ATTRINDX_MASK, PTE_ATTRINDX(MT_NORMAL_NC) | PTE_PXN | PTE_UXN)
 #define pgprot_device(prot) \
 	__pgprot_modify(prot, PTE_ATTRINDX_MASK, PTE_ATTRINDX(MT_DEVICE_nGnRE) | PTE_PXN | PTE_UXN)
-#define pgprot_iotable_init(prot) \
-	__pgprot_modify(prot, PTE_ATTRINDX_MASK, PTE_ATTRINDX(MT_DEVICE_GRE))
 #define __HAVE_PHYS_MEM_ACCESS_PROT
 struct file;
 extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
@@ -462,11 +425,6 @@ extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
-#ifdef CONFIG_UH_RKP
-	if (rkp_is_pg_protected((u64)pmdp)) {
-		uh_call(UH_APP_RKP, RKP_WRITE_PGT2, (u64)pmdp, pmd_val(pmd), 0, 0);
-	} else
-#endif
 	*pmdp = pmd;
 	dsb(ishst);
 	isb();
@@ -518,11 +476,6 @@ static inline phys_addr_t pmd_page_paddr(pmd_t pmd)
 
 static inline void set_pud(pud_t *pudp, pud_t pud)
 {
-#ifdef CONFIG_UH_RKP
-	if (rkp_is_pg_protected((u64)pudp)) {
-		uh_call(UH_APP_RKP, RKP_WRITE_PGT1, (u64)pudp, pud_val(pud), 0, 0);
-	} else
-#endif
 	*pudp = pud;
 	dsb(ishst);
 	isb();

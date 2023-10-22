@@ -37,9 +37,6 @@
 #include <linux/compat.h>
 #endif
 
-#define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_EXT4_FS_ENCRYPTION)
-#include <linux/fscrypt.h>
-
 /*
  * The fourth extended filesystem constants/structures
  */
@@ -593,10 +590,9 @@ enum {
 #define EXT4_ENCRYPTION_MODE_AES_256_GCM	2
 #define EXT4_ENCRYPTION_MODE_AES_256_CBC	3
 #define EXT4_ENCRYPTION_MODE_AES_256_CTS	4
-#define EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_XTS	5
-#define EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_CBC	6
+#define EXT4_ENCRYPTION_MODE_SPECK128_256_XTS	7
+#define EXT4_ENCRYPTION_MODE_SPECK128_256_CTS	8
 #define EXT4_ENCRYPTION_MODE_AES_256_HEH	126
-#define EXT4_ENCRYPTION_MODE_PRIVATE        127 /* fmp aes-xts */
 
 #include "ext4_crypto.h"
 
@@ -1273,9 +1269,7 @@ struct ext4_super_block {
 	__le32	s_lpf_ino;		/* Location of the lost+found inode */
 	__le32	s_prj_quota_inum;	/* inode for tracking project quota */
 	__le32	s_checksum_seed;	/* crc32c(uuid) if csum_seed set */
-	__le32	s_reserved[92];	 	/* Padding to the s_sec_magic */
-	__le32	s_sec_magic;		/* flag for reserved inodes */
-	__le32	s_reserved2[5];		/* Padding to the end of the block */
+	__le32	s_reserved[98];		/* Padding to the end of the block */
 	__le32	s_checksum;		/* crc32c(superblock) */
 };
 
@@ -1379,9 +1373,6 @@ struct ext4_sb_info {
 	unsigned long s_ext_extents;
 #endif
 
-	/* Reserved inodes count */
-	s64 s_r_inodes_count;
-
 	/* for buddy allocator */
 	struct ext4_group_info ***s_group_info;
 	struct inode *s_buddy_cache;
@@ -1470,14 +1461,6 @@ struct ext4_sb_info {
 	struct ratelimit_state s_err_ratelimit_state;
 	struct ratelimit_state s_warning_ratelimit_state;
 	struct ratelimit_state s_msg_ratelimit_state;
-
-	/* To gather information of fragmentation */
-	unsigned int s_sec_part_best_extents;
-	unsigned int s_sec_part_current_extents;
-	unsigned int s_sec_part_score;
-	unsigned int s_sec_defrag_writes_kb;
-	unsigned int s_sec_num_apps;
-	unsigned int s_sec_capacity_apps_kb;
 };
 
 static inline struct ext4_sb_info *EXT4_SB(struct super_block *sb)
@@ -1886,12 +1869,6 @@ static inline bool ext4_has_incompat_features(struct super_block *sb)
 #define EXT4_DEF_MAX_BATCH_TIME	15000 /* 15ms */
 
 /*
- * Default reserved inode count
- */
-#define EXT4_DEF_RESERVE_INODE 8192
-#define EXT4_SEC_DATA_MAGIC 0xBAB0CAFE /* data partition magic */
-
-/*
  * Minimum number of groups in a flexgroup before we separate out
  * directories into the first block group of a flexgroup
  */
@@ -2295,7 +2272,7 @@ int ext4_get_policy(struct inode *inode,
 
 /* crypto.c */
 extern struct kmem_cache *ext4_crypt_info_cachep;
-bool ext4_valid_contents_enc_mode(uint32_t mode);
+bool ext4_valid_enc_modes(uint32_t contents_mode, uint32_t filenames_mode);
 uint32_t ext4_validate_encryption_key_size(uint32_t mode, uint32_t size);
 extern struct workqueue_struct *ext4_read_workqueue;
 struct ext4_crypto_ctx *ext4_get_crypto_ctx(struct inode *inode,
@@ -2327,7 +2304,6 @@ static inline int ext4_sb_has_crypto(struct super_block *sb)
 #endif
 
 /* crypto_fname.c */
-bool ext4_valid_filenames_enc_mode(uint32_t mode);
 u32 ext4_fname_crypto_round_up(u32 size, u32 blksize);
 unsigned ext4_fname_encrypted_size(struct inode *inode, u32 ilen);
 int ext4_fname_crypto_alloc_buffer(struct inode *inode,
@@ -2376,14 +2352,6 @@ void ext4_free_encryption_info(struct inode *inode, struct ext4_crypt_info *ci);
 int ext4_has_encryption_key(struct inode *inode);
 
 int ext4_get_encryption_info(struct inode *inode);
-
-#ifdef CONFIG_EXT4CRYPT_SDP
-int ext4_get_encryption_key(struct inode *inode,
-						struct ext4_encryption_key *key);
-int fscrypt_get_encryption_kek(struct inode *inode,
-						struct ext4_crypt_info *crypt_info,
-						struct ext4_encryption_key *kek);
-#endif
 
 static inline struct ext4_crypt_info *ext4_encryption_info(struct inode *inode)
 {
@@ -2504,8 +2472,6 @@ extern int ext4_group_add_blocks(handle_t *handle, struct super_block *sb,
 				ext4_fsblk_t block, unsigned long count);
 extern int ext4_trim_fs(struct super_block *, struct fstrim_range *,
 				unsigned long blkdev_flags);
-extern ssize_t ext4_mb_freefrag_show(struct ext4_sb_info *sbi, char *buf);
-extern void ext4_process_freed_data(struct super_block *sb, tid_t commit_tid);
 
 /* inode.c */
 int ext4_inode_is_fast_symlink(struct inode *inode);
@@ -2777,14 +2743,6 @@ extern void ext4_group_desc_csum_set(struct super_block *sb, __u32 group,
 				     struct ext4_group_desc *gdp);
 extern int ext4_register_li_request(struct super_block *sb,
 				    ext4_group_t first_not_zeroed);
-/* for debugging, sangwoo2.lee */
-extern void print_iloc_info(struct super_block *sb,
-				struct ext4_iloc iloc);
-extern void print_bh(struct super_block *sb,
-                  struct buffer_head *bh, int start, int len);
-extern void print_block_data(struct super_block *sb, sector_t blocknr,
-                  unsigned char *data_to_dump, int start, int len);
-/* for debugging */
 
 static inline int ext4_has_group_desc_csum(struct super_block *sb)
 {

@@ -15,13 +15,6 @@ config PRINTK_TIME
 	  The behavior is also controlled by the kernel command line
 	  parameter printk.time=1. See Documentation/kernel-parameters.txt
 
-config PRINTK_PROCESS
-	bool "Show process information on printks"
-	depends on PRINTK
-	help
-	  Selecting this option causes process to be
-	  included in printk output. Or add printk.process=1 at boot-time.
-
 config MESSAGE_LOGLEVEL_DEFAULT
 	int "Default message log level (1-7)"
 	range 1 7
@@ -1907,16 +1900,6 @@ config BUG_ON_DATA_CORRUPTION
 	  for validity.
 
 	  If unsure, say N.
-
-config CC_WERROR
-	bool "Treat all compile warnings as errors"
-	default n
-	help
-	 Select this option to set compiler warnings as errors,
-	 to prevent easily-fixable problems from creeping into
-	 the codebase.
-
-	 If unsure, say N.
 
 source "samples/Kconfig"
 

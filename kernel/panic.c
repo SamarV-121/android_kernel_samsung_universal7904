@@ -26,9 +26,7 @@
 #include <linux/console.h>
 #include <linux/exynos-ss.h>
 #include <soc/samsung/exynos-condbg.h>
-#include <asm/core_regs.h>
 #include <sound/samsung/abox.h>
-#include "sched/sched.h"
 
 #include <asm/core_regs.h>
 
@@ -38,9 +36,6 @@
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
-
-/* Machine specific panic information string */
-char *mach_panic_string;
 
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
 static unsigned long tainted_mask;
@@ -74,22 +69,6 @@ void __weak panic_smp_self_stop(void)
 	while (1)
 		cpu_relax();
 }
-
-#ifdef CONFIG_ARM_CCI550_DEBUG_MODE
-#define CCI_BASE		(0x12200000)
-#define IMPR_ERR_OFFSET		(0x00010)
-
-void __iomem *cci_virt_base;
-
-void show_cci_info(void)
-{
-	u32 data;
-
-	pr_emerg("CCI debug info:\n");
-	data = __raw_readl(cci_virt_base + IMPR_ERR_OFFSET);
-	pr_emerg("\tIMPR_ERR %08x\n", data);
-}
-#endif
 
 /**
  *	panic - halt the system
@@ -152,20 +131,10 @@ void panic(const char *fmt, ...)
 	ecd_printf("Kernel Panic - not syncing: %s\n", buf);
 	pr_auto(ASL5, "Kernel panic - not syncing: %s\n", buf);
 
-#ifdef CONFIG_ARM_CCI550_DEBUG_MODE
-	show_cci_info();
-#endif
-	
-#ifdef CONFIG_RELOCATABLE_KERNEL
-	{
-		extern u64 *__boot_kernel_offset;
-		u64 *kernel_addr = (u64 *) &__boot_kernel_offset;
-		pr_emerg("Kernel loaded at: 0x%llx, offset from compile-time address %llx\n", kernel_addr[1]+kernel_addr[0], kernel_addr[1]-kernel_addr[2]);
-	}
-#endif
 	exynos_ss_prepare_panic();
 	exynos_ss_dump_panic(buf, (size_t)strnlen(buf, sizeof(buf)));
 //	exynos_abox_dump_sram();
+
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -176,9 +145,7 @@ void panic(const char *fmt, ...)
 #ifdef CONFIG_SEC_DUMP_SUMMARY
 	sec_debug_save_panic_info(buf, (unsigned long)__builtin_return_address(0));
 #endif
-#ifdef CONFIG_SCHED_DEBUG
-	sysrq_sched_debug_show();
-#endif
+
 	/*
 	 * If we have crashed and we have a crash kernel loaded let it handle
 	 * everything else.
@@ -475,11 +442,7 @@ static int init_oops_id(void)
 		get_random_bytes(&oops_id, sizeof(oops_id));
 	else
 		oops_id++;
-#ifdef CONFIG_ARM_CCI550_DEBUG_MODE
-	cci_virt_base = ioremap(CCI_BASE, SZ_4K);
-	if (!cci_virt_base)
-		pr_err("Unable to map SRAM to setup the CCI address\n");
-#endif
+
 	return 0;
 }
 late_initcall(init_oops_id);
@@ -487,10 +450,6 @@ late_initcall(init_oops_id);
 void print_oops_end_marker(void)
 {
 	init_oops_id();
-
-	if (mach_panic_string)
-		printk(KERN_WARNING "Board Information: %s\n",
-		       mach_panic_string);
 
 	pr_warn("---[ end trace %016llx ]---\n", (unsigned long long)oops_id);
 }

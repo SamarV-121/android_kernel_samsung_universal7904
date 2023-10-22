@@ -1559,10 +1559,6 @@ union rcu_special {
 };
 struct rcu_node;
 
-#ifdef CONFIG_FIVE
-struct task_integrity;
-#endif
-
 enum perf_event_task_context {
 	perf_invalid_context = -1,
 	perf_hw_context = 0,
@@ -2004,8 +2000,8 @@ struct task_struct {
 	 * time slack values; these are used to round up poll() and
 	 * select() etc timeout values. These are in nanoseconds.
 	 */
-	unsigned long timer_slack_ns;
-	unsigned long default_timer_slack_ns;
+	u64 timer_slack_ns;
+	u64 default_timer_slack_ns;
 
 #ifdef CONFIG_KASAN
 	unsigned int kasan_depth;
@@ -2056,14 +2052,8 @@ struct task_struct {
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
 #endif
-#ifdef CONFIG_SDP
-	unsigned int sensitive;
-#endif
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	unsigned long	task_state_change;
-#endif
-#ifdef CONFIG_FIVE
-	struct task_integrity *integrity;
 #endif
 	int pagefault_disabled;
 /* CPU-specific state of this task */
@@ -2276,12 +2266,7 @@ static inline int is_global_init(struct task_struct *tsk)
 extern struct pid *cad_pid;
 
 extern void free_task(struct task_struct *tsk);
-
-#ifdef CONFIG_TRACE_TASK_USAGE
-#define get_task_struct(tsk) do { BUG_ON(0 == atomic_read(&(tsk)->usage)); atomic_inc(&(tsk)->usage); } while(0)
-#else
 #define get_task_struct(tsk) do { atomic_inc(&(tsk)->usage); } while(0)
-#endif
 
 extern void __put_task_struct(struct task_struct *t);
 
@@ -2352,7 +2337,6 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 #define PF_SWAPWRITE	0x00800000	/* Allowed to write to swap */
 #define PF_NO_SETAFFINITY 0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY    0x08000000      /* Early kill for mce process policy */
-#define PF_NOFS_MASK	0x10000000	/* This process should not have __GFP_FS while shrinking */
 #define PF_MUTEX_TESTER	0x20000000	/* Thread belongs to the rt mutex tester */
 #define PF_FREEZER_SKIP	0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK 0x80000000      /* this thread called freeze_processes and should not be frozen */

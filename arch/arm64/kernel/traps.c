@@ -50,7 +50,7 @@
 #include <linux/sec_debug.h>
 #endif
 
-static const char *handler[] = {
+static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
 	"FIQ",
@@ -551,7 +551,7 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs, unsigned int esr
 	if ((unhandled_signal(current, SIGILL) && show_unhandled_signals_ratelimited()) || !user_mode(regs)) {
 		pr_auto(ASL1, "Undefined Instruction: pc=%p (0x%x), %s[%d]\n",
 			pc, esr, current->comm, task_pid_nr(current));
-		show_extra_register_data_simple(regs, 128);
+		dump_instr(KERN_INFO, regs);
 	}
 
 	info.si_signo = SIGILL;
@@ -614,7 +614,7 @@ asmlinkage long do_ni_syscall(struct pt_regs *regs)
 
 	if (show_unhandled_signals_ratelimited()) {
 		pr_info("%s[%d]: syscall %d\n", current->comm,
-			task_pid_nr(current), regs->syscallno);
+			task_pid_nr(current), (int)regs->syscallno);
 		dump_instr("", regs);
 		if (user_mode(regs))
 			__show_regs(regs);

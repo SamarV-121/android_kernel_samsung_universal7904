@@ -39,22 +39,6 @@ static unsigned long cached_scan_pfn;
 #define HPA_MIN_OOMADJ	100
 static unsigned long hpa_deathpending_timeout;
 
-static int test_task_flag(struct task_struct *p, int flag)
-{
-	struct task_struct *t = p;
-
-	do {
-		task_lock(t);
-		if (test_tsk_thread_flag(t, flag)) {
-			task_unlock(t);
-			return 1;
-		}
-		task_unlock(t);
-	} while_each_thread(p, t);
-
-	return 0;
-}
-
 static int hpa_killer(void)
 {
 	struct task_struct *tsk;
@@ -73,13 +57,9 @@ static int hpa_killer(void)
 		if (tsk->flags & PF_KTHREAD)
 			continue;
 
-		if (test_task_flag(tsk, TIF_MEMALLOC))
-			continue;
-
 		p = find_lock_task_mm(tsk);
 		if (!p)
 			continue;
-		
 
 		if (p->state & TASK_UNINTERRUPTIBLE) {
 			task_unlock(p);

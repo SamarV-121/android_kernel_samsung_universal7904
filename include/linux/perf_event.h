@@ -605,9 +605,6 @@ struct perf_event {
 	int				cgrp_defer_enabled;
 #endif
 
-#ifdef CONFIG_SEC_KWATCHER
-	int used_in_kwatcher;
-#endif
 #endif /* CONFIG_PERF_EVENTS */
 };
 

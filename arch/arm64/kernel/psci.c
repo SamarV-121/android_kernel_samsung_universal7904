@@ -31,10 +31,6 @@
 #include <asm/smp_plat.h>
 #include <asm/suspend.h>
 
-#if defined(CONFIG_SEC_MMIOTRACE) || defined(CONFIG_SEC_KWATCHER)
-#include <asm/debug-monitors.h>
-#endif
-
 static DEFINE_PER_CPU_READ_MOSTLY(u32 *, psci_power_state);
 
 static int __maybe_unused cpu_psci_cpu_init_idle(unsigned int cpu)
@@ -124,16 +120,6 @@ static int cpu_psci_cpu_boot(unsigned int cpu)
 		pr_err("failed to boot CPU%d (%d)\n", cpu, err);
 
 	return err;
-}
-
-static void cpu_psci_cpu_postboot(void)
-{
-#ifdef CONFIG_SEC_KWATCHER
-	restore_debug_monitors();
-#endif
-#ifdef CONFIG_SEC_MMIOTRACE
-	check_and_clear_os_lock();
-#endif
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -285,7 +271,6 @@ const struct cpu_operations cpu_psci_ops = {
 	.cpu_init	= cpu_psci_cpu_init,
 	.cpu_prepare	= cpu_psci_cpu_prepare,
 	.cpu_boot	= cpu_psci_cpu_boot,
-	.cpu_postboot	= cpu_psci_cpu_postboot,
 #ifdef CONFIG_HOTPLUG_CPU
 	.cpu_disable	= cpu_psci_cpu_disable,
 	.cpu_die	= cpu_psci_cpu_die,

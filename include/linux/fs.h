@@ -143,12 +143,6 @@ typedef void (dax_iodone_t)(struct buffer_head *bh_map, int uptodate);
 /* Has write method(s) */
 #define FMODE_CAN_WRITE         ((__force fmode_t)0x40000)
 
-/* File hasn't page cache and can't be mmaped, for stackable filesystem */
-#define FMODE_NONMAPPABLE        ((__force fmode_t)0x400000)
- 
-/* File page don't need to be cached, for stackable filesystem's lower file */
-#define FMODE_NONCACHEABLE     ((__force fmode_t)0x800000)
-
 /* File was opened by fanotify and shouldn't generate fanotify events */
 #define FMODE_NONOTIFY		((__force fmode_t)0x4000000)
 
@@ -478,12 +472,6 @@ struct address_space {
 	int 			private_algo_mode;	/* Encryption algorithm */
 	pgoff_t			sensitive_data_index;	/* data starts here */
 	struct crypto_hash	*hash_tfm;	/* hash transform */
-#ifdef CONFIG_CRYPTO_FIPS
-	bool			cc_enable;	/* cc flag */
-#endif
-#ifdef CONFIG_SDP
-	int userid;
-#endif
 } __attribute__((aligned(sizeof(long))));
 	/*
 	 * On most architectures that alignment is already the case; but
@@ -952,10 +940,6 @@ struct file {
 	struct list_head	f_tfile_llink;
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
-
-#if defined(CONFIG_FIVE_PA_FEATURE) || defined(CONFIG_PROCA)
-	void *f_signature;
-#endif
 } __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
 
 struct file_handle {
@@ -1739,10 +1723,6 @@ struct file_operations {
 #ifndef CONFIG_MMU
 	unsigned (*mmap_capabilities)(struct file *);
 #endif
-	struct file* (*get_lower_file)(struct file *f);
-#ifdef CONFIG_EXT4CRYPT_SDP
-	int (*check_sdp_info) (struct file *file);
-#endif
 };
 
 struct inode_operations {
@@ -1831,7 +1811,6 @@ struct super_operations {
 				  struct shrink_control *);
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
-	long (*unlink_callback)(struct super_block *, char *);
 };
 
 /*
@@ -2567,8 +2546,6 @@ static inline int generic_write_sync(struct file *file, loff_t pos, loff_t count
 }
 extern void emergency_sync(void);
 extern void emergency_remount(void);
-extern int intr_sync(int *);
-
 #ifdef CONFIG_BLOCK
 extern sector_t bmap(struct inode *, sector_t);
 #endif
@@ -3169,14 +3146,5 @@ static inline bool dir_relax(struct inode *inode)
 
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
-
-/* for Android O */
-#define AID_USE_SEC_RESERVED	KGIDT_INIT(4444)
-#if ANDROID_VERSION < 90000
-#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5555)
-#else
-/* for Android P */
-#define AID_USE_ROOT_RESERVED	KGIDT_INIT(5678)
-#endif
 
 #endif /* _LINUX_FS_H */

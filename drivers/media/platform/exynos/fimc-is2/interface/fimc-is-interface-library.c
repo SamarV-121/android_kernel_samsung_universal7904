@@ -24,11 +24,6 @@
 #include "../fimc-is-device-ischain.h"
 #include "fimc-is-vender.h"
 
-#ifdef CONFIG_UH_RKP
-#include <linux/uh.h>
-#include <linux/rkp.h>
-#endif
-
 struct fimc_is_lib_support gPtr_lib_support;
 struct mutex gPtr_bin_load_ctrl;
 extern struct fimc_is_lib_vra *g_lib_vra;
@@ -2167,30 +2162,6 @@ int fimc_is_load_ddk_bin(int loadType)
 	}
 
 	if (loadType == BINARY_LOAD_ALL) {
-#ifdef CONFIG_UH_RKP
-		rkp_dynamic_load_t rkp_dyn;
-		static rkp_dynamic_load_t rkp_dyn_before = {0};
-#ifdef CONFIG_KNOX_KAP
-		if (boot_mode_security)
-#endif
-		do{
-			memset(&rkp_dyn, 0, sizeof(rkp_dyn));
-			rkp_dyn.binary_base = lib_addr;
-			rkp_dyn.binary_size = bin.size;
-			rkp_dyn.code_base1 = memory_attribute[INDEX_ISP_BIN].vaddr;
-			rkp_dyn.code_size1 = memory_attribute[INDEX_ISP_BIN].numpages * PAGE_SIZE;
-#ifdef USE_ONE_BINARY
-			rkp_dyn.type = RKP_DYN_FIMC_COMBINED;
-			rkp_dyn.code_base2 = memory_attribute[INDEX_VRA_BIN].vaddr;
-			rkp_dyn.code_size2 = memory_attribute[INDEX_VRA_BIN].numpages * PAGE_SIZE;
-#else
-			rkp_dyn.type = RKP_DYN_FIMC;
-#endif
-			if (rkp_dyn_before.type)
-				uh_call(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_RM,(u64)&rkp_dyn_before, 0, 0);
-			memcpy(&rkp_dyn_before, &rkp_dyn, sizeof(rkp_dynamic_load_t));
-		}while(0);
-#endif
 		/* load DDK library */
 		ret = fimc_is_memory_attribute_nxrw(&memory_attribute[INDEX_ISP_BIN]);
 		if (ret) {
@@ -2212,22 +2183,6 @@ int fimc_is_load_ddk_bin(int loadType)
 		__flush_dcache_area((void *)lib_addr, bin.size - CDH_SIZE);
 		flush_icache_range(lib_addr, bin.size);
 
-#ifdef CONFIG_UH_RKP
-#ifdef CONFIG_KNOX_KAP
-		if (boot_mode_security)
-#endif
-		do{
-			ret = uh_call(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_INS, (u64)&rkp_dyn, 0, 0);
-			if (ret) {
-				err_lib("fail to load verify FIMC in EL2");
-			}
-		}while(0);
-#ifdef CONFIG_KNOX_KAP
-		else
-#else
-		if(0)
-#endif
-#endif
 		do{
 			ret = fimc_is_memory_attribute_rox(&memory_attribute[INDEX_ISP_BIN]);
 			if (ret) {
@@ -2359,24 +2314,6 @@ int fimc_is_load_rta_bin(int loadType)
 	}
 
 	if (loadType == BINARY_LOAD_ALL) {
-#ifdef CONFIG_UH_RKP
-		rkp_dynamic_load_t rkp_dyn;
-		static rkp_dynamic_load_t rkp_dyn_before = {0};
-#ifdef CONFIG_KNOX_KAP
-		if (boot_mode_security)
-#endif
-		do{
-			memset(&rkp_dyn, 0, sizeof(rkp_dyn));
-			rkp_dyn.binary_base = lib_rta;
-			rkp_dyn.binary_size = bin.size;
-			rkp_dyn.code_base1 = rta_memory_attribute.vaddr;
-			rkp_dyn.code_size1 = rta_memory_attribute.numpages * PAGE_SIZE;
-			rkp_dyn.type = RKP_DYN_FIMC;
-			if (rkp_dyn_before.type)
-				uh_call(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_RM, (u64)&rkp_dyn_before, 0, 0);
-			memcpy(&rkp_dyn_before, &rkp_dyn, sizeof(rkp_dynamic_load_t));
-		}while(0);
-#endif
 		/* load RTA library */
 		ret = fimc_is_memory_attribute_nxrw(&rta_memory_attribute);
 		if (ret) {
@@ -2389,22 +2326,7 @@ int fimc_is_load_rta_bin(int loadType)
 		memcpy((void *)lib_rta, bin.data, bin.size);
 		__flush_dcache_area((void *)lib_rta, bin.size);
 		flush_icache_range(lib_rta, bin.size);
-#ifdef CONFIG_UH_RKP
-#ifdef CONFIG_KNOX_KAP
-		if (boot_mode_security)
-#endif
-		do{
-			ret = uh_call(UH_APP_RKP, RKP_DYNAMIC_LOAD, RKP_DYN_COMMAND_INS,(u64)&rkp_dyn, 0, 0);
-			if (ret) {
-				err_lib("fail to load verify FIMC in EL2");
-			}
-		}while(0);
-#ifdef CONFIG_KNOX_KAP
-		else
-#else
-		if(0)
-#endif
-#endif
+
 		do{
 			ret = fimc_is_memory_attribute_rox(&rta_memory_attribute);
 			if (ret) {

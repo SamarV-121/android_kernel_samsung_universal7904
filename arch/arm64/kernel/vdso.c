@@ -116,7 +116,7 @@ static int __init vdso_init(void)
 	int i;
 	unsigned long pfn;
 
-	if (memcmp(&vdso_start, "\177ELF", 1)) {
+	if (memcmp(&vdso_start, "\177ELF", 4)) {
 		pr_err("vDSO is not a valid ELF object!\n");
 		return -EINVAL;
 	}

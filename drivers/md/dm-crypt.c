@@ -1153,9 +1153,6 @@ static void clone_init(struct dm_crypt_io *io, struct bio *clone)
 	clone->bi_end_io  = crypt_endio;
 	clone->bi_bdev    = cc->dev->bdev;
 	clone->bi_rw      = io->base_bio->bi_rw;
-#ifdef CONFIG_JOURNAL_DATA_TAG
-	clone->bi_flags   |= io->base_bio->bi_flags & BIO_JOURNAL_TAG_MASK;
-#endif
 }
 
 
@@ -2178,8 +2175,7 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	 * - for REQ_DISCARD caller must use flush if IO ordering matters
 	 */
 
-	if (unlikely(bio->bi_rw & (REQ_FLUSH | REQ_DISCARD) ||
-		bio_flagged(bio, BIO_BYPASS))) {
+	if (unlikely(bio->bi_rw & (REQ_FLUSH | REQ_DISCARD))) {
 		bio->bi_bdev = cc->dev->bdev;
 		if (bio_sectors(bio))
 			bio->bi_iter.bi_sector = cc->start +

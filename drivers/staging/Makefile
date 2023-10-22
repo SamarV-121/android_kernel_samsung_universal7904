@@ -49,4 +49,3 @@ obj-$(CONFIG_WILC1000)		+= wilc1000/
 obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_SEC_EXT)		+= samsung/
 obj-$(CONFIG_SEC_STI)		+= sti/
-obj-$(CONFIG_VNSWAP)		+= vnswap/

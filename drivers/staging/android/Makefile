@@ -10,6 +10,3 @@ obj-$(CONFIG_ANDROID_INTF_ALARM_DEV)   += alarm-dev.o
 obj-$(CONFIG_SYNC)			+= sync.o sync_debug.o
 obj-$(CONFIG_SW_SYNC)			+= sw_sync.o
 obj-$(CONFIG_ANDROID_VSOC)		+= vsoc.o
-obj-$(CONFIG_SAMSUNG_FREECESS)		+= freecess.o
-obj-$(CONFIG_SAMSUNG_FREECESS)		+= freecess_pkg.o
-obj-$(CONFIG_SAMSUNG_LMKD_DEBUG)		+= lmkd_debug.o

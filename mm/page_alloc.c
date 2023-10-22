@@ -2955,8 +2955,7 @@ retry:
 	 */
 	if (!page && !drained) {
 		unreserve_highatomic_pageblock(ac);
-		if (!need_memory_boosting(NULL, true))
-			drain_all_pages(NULL);
+		drain_all_pages(NULL);
 		drained = true;
 		goto retry;
 	}
@@ -3078,10 +3077,6 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 		WARN_ON_ONCE(!(gfp_mask & __GFP_NOWARN));
 		return NULL;
 	}
-
-#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-	set_tsk_thread_flag(current, TIF_MEMALLOC);
-#endif
 
 	/*
 	 * We also sanity check to catch abuse of atomic reserves being used by
@@ -3251,14 +3246,8 @@ noretry:
 	if (page)
 		goto got_pg;
 nopage:
-#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-	clear_tsk_thread_flag(current, TIF_MEMALLOC);
-#endif
 	warn_alloc_failed(gfp_mask, order, NULL);
 got_pg:
-#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-	clear_tsk_thread_flag(current, TIF_MEMALLOC);
-#endif
 	return page;
 }
 
@@ -3280,12 +3269,10 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 		.migratetype = gfpflags_to_migratetype(gfp_mask),
 	};
 	gfp_t gfp_highuser_movable = GFP_HIGHUSER | __GFP_MOVABLE;
-	
-	gfp_mask &= gfp_allowed_mask;
-	if (unlikely(current->flags & PF_NOFS_MASK))
-		gfp_mask &= ~__GFP_FS;
 
-	// The request GFP_HIGHUSER | __GFP_MOVABLE also allocates from CMA.
+	gfp_mask &= gfp_allowed_mask;
+
+	/* The request GFP_HIGHUSER | __GFP_MOVABLE also allocates from CMA. */
 	if ((gfp_highuser_movable & gfp_mask) == gfp_highuser_movable)
 		gfp_mask |= __GFP_CMA;
 
@@ -6217,9 +6204,6 @@ void setup_per_zone_wmarks(void)
  */
 static void __meminit calculate_zone_inactive_ratio(struct zone *zone)
 {
-#ifdef CONFIG_FIX_INACTIVE_RATIO
-	zone->inactive_ratio = 1;
-#else
 	unsigned int gb, ratio;
 
 	/* Zone size in gigabytes */
@@ -6230,7 +6214,6 @@ static void __meminit calculate_zone_inactive_ratio(struct zone *zone)
 		ratio = 1;
 
 	zone->inactive_ratio = ratio;
-#endif
 }
 
 static void __meminit setup_per_zone_inactive_ratio(void)

@@ -70,14 +70,6 @@ struct ion_device {
 	struct dentry *debug_root;
 	struct dentry *heaps_debug_root;
 	struct dentry *clients_debug_root;
-
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-	/* event log */
-	struct dentry *buffer_debug_file;
-	struct dentry *event_debug_file;
-	struct ion_eventlog eventlog[ION_EVENT_LOG_MAX];
-	atomic_t event_idx;
-#endif
 };
 
 /**
@@ -188,184 +180,6 @@ void ion_debug_heap_usage_show(struct ion_heap *heap)
 	mutex_unlock(&dev->buffer_lock);
 }
 
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-static inline void ION_EVENT_ALLOC(struct ion_buffer *buffer, ktime_t begin)
-{
-	struct ion_device *dev = buffer->dev;
-	int idx = atomic_inc_return(&dev->event_idx);
-	struct ion_eventlog *log = &dev->eventlog[idx % ION_EVENT_LOG_MAX];
-	struct ion_event_alloc *data = &log->data.alloc;
-
-	log->type = ION_EVENT_TYPE_ALLOC;
-	log->begin = begin;
-	log->done = ktime_get();
-	data->id = buffer;
-	data->size = buffer->size;
-	data->flags = buffer->flags;
-	strlcpy(data->heapname, buffer->heap->name, sizeof(data->heapname));
-}
-
-static inline void ION_EVENT_FREE(struct ion_buffer *buffer, ktime_t begin)
-{
-	struct ion_device *dev = buffer->dev;
-	int idx = atomic_inc_return(&dev->event_idx) % ION_EVENT_LOG_MAX;
-	struct ion_eventlog *log = &dev->eventlog[idx];
-	struct ion_event_free *data = &log->data.free;
-
-	log->type = ION_EVENT_TYPE_FREE;
-	log->begin = begin;
-	log->done = ktime_get();
-	data->id = buffer;
-	data->size = buffer->size;
-	data->shrinker = (buffer->private_flags & ION_PRIV_FLAG_SHRINKER_FREE);
-	strlcpy(data->heapname, buffer->heap->name, sizeof(data->heapname));
-}
-
-static inline void ION_EVENT_MMAP(struct ion_buffer *buffer, ktime_t begin)
-{
-	struct ion_device *dev = buffer->dev;
-	int idx = atomic_inc_return(&dev->event_idx) % ION_EVENT_LOG_MAX;
-	struct ion_eventlog *log = &dev->eventlog[idx];
-	struct ion_event_mmap *data = &log->data.mmap;
-
-	log->type = ION_EVENT_TYPE_MMAP;
-	log->begin = begin;
-	log->done = ktime_get();
-	data->id = buffer;
-	data->size = buffer->size;
-	strlcpy(data->heapname, buffer->heap->name, sizeof(data->heapname));
-}
-
-void ION_EVENT_SHRINK(struct ion_device *dev, size_t size)
-{
-	int idx = atomic_inc_return(&dev->event_idx) % ION_EVENT_LOG_MAX;
-	struct ion_eventlog *log = &dev->eventlog[idx];
-
-	log->type = ION_EVENT_TYPE_SHRINK;
-	log->begin = ktime_get();
-	log->done = ktime_set(0, 0);
-	log->data.shrink.size = size;
-}
-
-void ION_EVENT_CLEAR(struct ion_buffer *buffer, ktime_t begin)
-{
-	struct ion_device *dev = buffer->dev;
-	int idx = atomic_inc_return(&dev->event_idx) % ION_EVENT_LOG_MAX;
-	struct ion_eventlog *log = &dev->eventlog[idx];
-	struct ion_event_clear *data = &log->data.clear;
-
-	log->type = ION_EVENT_TYPE_CLEAR;
-	log->begin = begin;
-	log->done = ktime_get();
-	data->id = buffer;
-	data->size = buffer->size;
-	data->flags = buffer->flags;
-	strlcpy(data->heapname, buffer->heap->name, sizeof(data->heapname));
-}
-
-static struct ion_task *ion_buffer_task_lookup(struct ion_buffer *buffer,
-							struct device *master)
-{
-	bool found = false;
-	struct ion_task *task;
-
-	list_for_each_entry(task, &buffer->master_list, list) {
-		if (task->master == master) {
-			found = true;
-			break;
-		}
-	}
-
-	return found ? task : NULL;
-}
-
-static void ion_buffer_set_task_info(struct ion_buffer *buffer)
-{
-	INIT_LIST_HEAD(&buffer->master_list);
-	get_task_comm(buffer->task_comm, current->group_leader);
-	get_task_comm(buffer->thread_comm, current);
-	buffer->pid = task_pid_nr(current->group_leader);
-	buffer->tid = task_pid_nr(current);
-}
-
-static void ion_buffer_task_add(struct ion_buffer *buffer,
-					struct device *master)
-{
-	struct ion_task *task;
-
-	task = ion_buffer_task_lookup(buffer, master);
-	if (!task) {
-		task = kzalloc(sizeof(*task), GFP_KERNEL);
-		if (task) {
-			task->master = master;
-			kref_init(&task->ref);
-			list_add_tail(&task->list, &buffer->master_list);
-		}
-	} else {
-		kref_get(&task->ref);
-	}
-}
-
-static void ion_buffer_task_add_lock(struct ion_buffer *buffer,
-					struct device *master)
-{
-	mutex_lock(&buffer->lock);
-	ion_buffer_task_add(buffer, master);
-	mutex_unlock(&buffer->lock);
-}
-
-static void __ion_buffer_task_remove(struct kref *kref)
-{
-	struct ion_task *task = container_of(kref, struct ion_task, ref);
-
-	list_del(&task->list);
-	kfree(task);
-}
-
-static void ion_buffer_task_remove(struct ion_buffer *buffer,
-					struct device *master)
-{
-	struct ion_task *task, *tmp;
-
-	list_for_each_entry_safe(task, tmp, &buffer->master_list, list) {
-		if (task->master == master) {
-			kref_put(&task->ref, __ion_buffer_task_remove);
-			break;
-		}
-	}
-}
-
-static void ion_buffer_task_remove_lock(struct ion_buffer *buffer,
-					struct device *master)
-{
-	mutex_lock(&buffer->lock);
-	ion_buffer_task_remove(buffer, master);
-	mutex_unlock(&buffer->lock);
-}
-
-static void ion_buffer_task_remove_all(struct ion_buffer *buffer)
-{
-	struct ion_task *task, *tmp;
-
-	mutex_lock(&buffer->lock);
-	list_for_each_entry_safe(task, tmp, &buffer->master_list, list) {
-		list_del(&task->list);
-		kfree(task);
-	}
-	mutex_unlock(&buffer->lock);
-}
-#else
-#define ION_EVENT_ALLOC(buffer, begin)			do { } while (0)
-#define ION_EVENT_FREE(buffer, begin)			do { } while (0)
-#define ION_EVENT_MMAP(buffer, begin)			do { } while (0)
-#define ion_buffer_set_task_info(buffer)		do { } while (0)
-#define ion_buffer_task_add(buffer, master)		do { } while (0)
-#define ion_buffer_task_add_lock(buffer, master)	do { } while (0)
-#define ion_buffer_task_remove(buffer, master)		do { } while (0)
-#define ion_buffer_task_remove_lock(buffer, master)	do { } while (0)
-#define ion_buffer_task_remove_all(buffer)		do { } while (0)
-#endif
-
 /* this function should only be called while dev->lock is held */
 static void ion_buffer_add(struct ion_device *dev,
 			   struct ion_buffer *buffer)
@@ -390,9 +204,6 @@ static void ion_buffer_add(struct ion_device *dev,
 
 	rb_link_node(&buffer->node, parent, p);
 	rb_insert_color(&buffer->node, &dev->buffers);
-
-	ion_buffer_set_task_info(buffer);
-	ion_buffer_task_add(buffer, dev->dev.this_device);
 }
 
 /* this function should only be called while dev->lock is held */
@@ -503,7 +314,6 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 	struct ion_iovm_map *iovm_map;
 	struct ion_iovm_map *tmp;
 
-	ION_EVENT_BEGIN();
 	trace_ion_free_start((unsigned long) buffer, buffer->size,
 				buffer->private_flags & ION_PRIV_FLAG_SHRINKER_FREE);
 
@@ -521,8 +331,6 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 	buffer->heap->ops->free(buffer);
 	vfree(buffer->pages);
 
-	ion_buffer_task_remove_all(buffer);
-	ION_EVENT_FREE(buffer, ION_EVENT_DONE());
 	trace_ion_free_end((unsigned long) buffer, buffer->size,
 				buffer->private_flags & ION_PRIV_FLAG_SHRINKER_FREE);
 	kfree(buffer);
@@ -807,7 +615,6 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 	unsigned int heapmask;
 	int ret;
 
-	ION_EVENT_BEGIN();
 	trace_ion_alloc_start(client->name, 0, len, align, heap_id_mask, flags);
 
 	pr_debug("%s: len %zu align %zu heap_id_mask %u flags %x\n", __func__,
@@ -887,7 +694,6 @@ retry:
 					len, align, heap_id_mask, flags);
 	}
 
-	ION_EVENT_ALLOC(buffer, ION_EVENT_DONE());
 	trace_ion_alloc_end(client->name, (unsigned long) buffer,
 					len, align, heap_id_mask, flags);
 
@@ -1096,17 +902,10 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-	seq_printf(s, "%16.s %4.s %16.s %4.s %10.s %8.s %9.s\n",
-		   "task", "pid", "thread", "tid", "size", "# procs", "flag");
-	seq_printf(s, "----------------------------------------------"
-			"--------------------------------------------\n");
-#else
 	seq_printf(s, "%16.s %4.s %10.s %8.s %9.s\n",
 		   "task", "pid", "size", "# procs", "flag");
 	seq_printf(s, "----------------------------------------------"
 			"--------------------------------------------\n");
-#endif
 
 	mutex_lock(&client->lock);
 	for (n = rb_first(&client->handles); n; n = rb_next(n)) {
@@ -1119,16 +918,9 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 			names[id] = buffer->heap->name;
 		sizes[id] += buffer->size;
 		sizes_pss[id] += (buffer->size / buffer->handle_count);
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-		seq_printf(s, "%16.s %4u %16.s %4u %10zu %8d %9lx\n",
-			   buffer->task_comm, buffer->pid,
-				buffer->thread_comm, buffer->tid, buffer->size,
-				buffer->handle_count, buffer->flags);
-#else
 		seq_printf(s, "%16.s %4u %10zu %8d %9lx\n",
 			   buffer->task_comm, buffer->pid,
 				buffer->size, buffer->handle_count, buffer->flags);
-#endif
 	}
 	mutex_unlock(&client->lock);
 	up_read(&g_idev->lock);
@@ -1326,8 +1118,6 @@ static struct sg_table *ion_map_dma_buf(struct dma_buf_attachment *attachment,
 
 	ion_buffer_sync_for_device(buffer, attachment->dev, direction);
 
-	ion_buffer_task_add_lock(buffer, attachment->dev);
-
 	return buffer->sg_table;
 }
 
@@ -1335,7 +1125,6 @@ static void ion_unmap_dma_buf(struct dma_buf_attachment *attachment,
 			      struct sg_table *table,
 			      enum dma_data_direction direction)
 {
-	ion_buffer_task_remove_lock(attachment->dmabuf->priv, attachment->dev);
 }
 
 void ion_pages_sync_for_device(struct device *dev, struct page *page,
@@ -1452,8 +1241,6 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 	struct ion_buffer *buffer = dmabuf->priv;
 	int ret = 0;
 
-	ION_EVENT_BEGIN();
-
 	if (buffer->flags & ION_FLAG_NOZEROED) {
 		pr_err("%s: mmap non-zeroed buffer to user is prohibited!\n",
 			__func__);
@@ -1488,7 +1275,6 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		vma->vm_private_data = buffer;
 		vma->vm_ops = &ion_vma_ops;
 		ion_vm_open(vma);
-		ION_EVENT_MMAP(buffer, ION_EVENT_DONE());
 		trace_ion_mmap_end((unsigned long) buffer, buffer->size,
 				!(buffer->flags & ION_FLAG_CACHED_NEEDS_SYNC));
 		return 0;
@@ -1506,7 +1292,6 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		pr_err("%s: failure mapping buffer to userspace\n",
 		       __func__);
 
-	ION_EVENT_MMAP(buffer, ION_EVENT_DONE());
 	trace_ion_mmap_end((unsigned long) buffer, buffer->size,
 			!(buffer->flags & ION_FLAG_CACHED_NEEDS_SYNC));
 
@@ -2287,237 +2072,6 @@ void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 }
 EXPORT_SYMBOL(ion_device_add_heap);
 
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-
-#define MAX_DUMP_TASKS		8
-#define MAX_DUMP_NAME_LEN	32
-#define MAX_DUMP_BUFF_LEN	512
-
-static void ion_buffer_dump_flags(struct seq_file *s, unsigned long flags)
-{
-	if ((flags & ION_FLAG_CACHED) && !(flags & ION_FLAG_CACHED_NEEDS_SYNC))
-		seq_printf(s, "cached|faultmap");
-	else if (flags & ION_FLAG_CACHED)
-		seq_printf(s, "cached|needsync");
-	else
-		seq_printf(s, "noncached");
-
-	if (flags & ION_FLAG_NOZEROED)
-		seq_printf(s, "|nozeroed");
-
-	if (flags & ION_FLAG_PROTECTED)
-		seq_printf(s, "|protected");
-}
-
-static void ion_buffer_dump_tasks(struct ion_buffer *buffer, char *str)
-{
-	struct ion_task *task, *tmp;
-	const char *delim = "|";
-	size_t total_len = 0;
-	int count = 0;
-
-	list_for_each_entry_safe(task, tmp, &buffer->master_list, list) {
-		const char *name;
-		size_t len = strlen(dev_name(task->master));
-
-		if (len > MAX_DUMP_NAME_LEN)
-			len = MAX_DUMP_NAME_LEN;
-		if (!strncmp(dev_name(task->master), "ion", len)) {
-			continue;
-		} else {
-			name = dev_name(task->master) + 9;
-			len -= 9;
-		}
-		if (total_len + len + 1 > MAX_DUMP_BUFF_LEN)
-			break;
-
-		strncat((char *)(str + total_len), name, len);
-		total_len += len;
-		if (!list_is_last(&task->list, &buffer->master_list))
-			str[total_len++] = *delim;
-
-		if (++count > MAX_DUMP_TASKS)
-			break;
-	}
-}
-
-static int ion_debug_buffer_show(struct seq_file *s, void *unused)
-{
-	struct ion_device *dev = s->private;
-	struct rb_node *n;
-	char *master_name;
-	size_t total_size = 0;
-
-	master_name = kzalloc(MAX_DUMP_BUFF_LEN, GFP_KERNEL);
-	if (!master_name) {
-		pr_err("%s: no memory for client string buffer\n", __func__);
-		return -ENOMEM;
-	}
-
-	seq_printf(s, "%20.s %16.s %4.s %16.s %4.s %10.s %4.s %3.s %6.s "
-			"%24.s %9.s\n",
-			"heap", "task", "pid", "thread", "tid",
-			"size", "kmap", "ref", "handle",
-			"master", "flag");
-	seq_printf(s, "------------------------------------------"
-			"----------------------------------------"
-			"----------------------------------------"
-			"--------------------------------------\n");
-
-	mutex_lock(&dev->buffer_lock);
-	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
-		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
-						     node);
-		mutex_lock(&buffer->lock);
-		ion_buffer_dump_tasks(buffer, master_name);
-		total_size += buffer->size;
-		seq_printf(s, "%20.s %16.s %4u %16.s %4u %10zu %4d %3d %6d "
-				"%24.s %9lx", buffer->heap->name,
-				buffer->task_comm, buffer->pid,
-				buffer->thread_comm,
-				buffer->tid, buffer->size, buffer->kmap_cnt,
-				atomic_read(&buffer->ref.refcount),
-				buffer->handle_count, master_name,
-				buffer->flags);
-		seq_printf(s, "(");
-		ion_buffer_dump_flags(s, buffer->flags);
-		seq_printf(s, ")\n");
-		mutex_unlock(&buffer->lock);
-
-		memset(master_name, 0, MAX_DUMP_BUFF_LEN);
-	}
-	mutex_unlock(&dev->buffer_lock);
-
-	seq_printf(s, "------------------------------------------"
-			"----------------------------------------"
-			"----------------------------------------"
-			"--------------------------------------\n");
-	seq_printf(s, "%16.s %16zu\n", "total ", total_size);
-	seq_printf(s, "------------------------------------------"
-			"----------------------------------------"
-			"----------------------------------------"
-			"--------------------------------------\n");
-
-	kfree(master_name);
-
-	return 0;
-}
-
-static int ion_debug_buffer_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, ion_debug_buffer_show, inode->i_private);
-}
-
-static const struct file_operations debug_buffer_fops = {
-	.open = ion_debug_buffer_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static void ion_debug_event_show_one(struct seq_file *s,
-					struct ion_eventlog *log)
-{
-	struct timeval tv = ktime_to_timeval(log->begin);
-	long elapsed = ktime_us_delta(log->done, log->begin);
-
-	if (elapsed == 0)
-		return;
-
-	seq_printf(s, "[%06ld.%06ld] ", tv.tv_sec, tv.tv_usec);
-
-	switch (log->type) {
-	case ION_EVENT_TYPE_ALLOC:
-		{
-		struct ion_event_alloc *data = &log->data.alloc;
-		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "alloc",
-				data->id, data->heapname, data->size);
-		break;
-		}
-	case ION_EVENT_TYPE_FREE:
-		{
-		struct ion_event_free *data = &log->data.free;
-		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "free",
-				data->id, data->heapname, data->size);
-		break;
-		}
-	case ION_EVENT_TYPE_MMAP:
-		{
-		struct ion_event_mmap *data = &log->data.mmap;
-		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "mmap",
-				data->id, data->heapname, data->size);
-		break;
-		}
-	case ION_EVENT_TYPE_SHRINK:
-		{
-		struct ion_event_shrink *data = &log->data.shrink;
-		seq_printf(s, "%8s  %16lx  %18s  %11zd  ", "shrink",
-				0l, "ion_noncontig_heap", data->size);
-		elapsed = 0;
-		break;
-		}
-	case ION_EVENT_TYPE_CLEAR:
-		{
-		struct ion_event_clear *data = &log->data.clear;
-		seq_printf(s, "%8s  %pK  %18s  %11zd  ", "clear",
-				data->id, data->heapname, data->size);
-		break;
-		}
-	}
-
-	seq_printf(s, "%9ld", elapsed);
-
-	if (elapsed > 100 * USEC_PER_MSEC)
-		seq_printf(s, " *");
-
-	if (log->type == ION_EVENT_TYPE_ALLOC) {
-		seq_printf(s, "  ");
-		ion_buffer_dump_flags(s, log->data.alloc.flags);
-	} else if (log->type == ION_EVENT_TYPE_CLEAR) {
-		seq_printf(s, "  ");
-		ion_buffer_dump_flags(s, log->data.clear.flags);
-	}
-
-	if (log->type == ION_EVENT_TYPE_FREE && log->data.free.shrinker)
-		seq_printf(s, " shrinker");
-
-	seq_printf(s, "\n");
-}
-
-static int ion_debug_event_show(struct seq_file *s, void *unused)
-{
-	struct ion_device *dev = s->private;
-	int index = atomic_read(&dev->event_idx) % ION_EVENT_LOG_MAX;
-	int last = index;
-
-	seq_printf(s, "%13s %10s  %8s  %18s  %11s %10s %24s\n", "timestamp",
-			"type", "id", "heap", "size", "time (us)", "remarks");
-	seq_printf(s, "-------------------------------------------");
-	seq_printf(s, "-------------------------------------------");
-	seq_printf(s, "-----------------------------------------\n");
-
-	do {
-		if (++index >= ION_EVENT_LOG_MAX)
-			index = 0;
-		ion_debug_event_show_one(s, &dev->eventlog[index]);
-	} while (index != last);
-
-	return 0;
-}
-
-static int ion_debug_event_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, ion_debug_event_show, inode->i_private);
-}
-
-static const struct file_operations debug_event_fops = {
-	.open = ion_debug_event_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-#endif
-
 struct ion_device *ion_device_create(long (*custom_ioctl)
 				     (struct ion_client *client,
 				      unsigned int cmd,
@@ -2557,23 +2111,6 @@ struct ion_device *ion_device_create(long (*custom_ioctl)
 		pr_err("ion: failed to create debugfs clients directory.\n");
 		goto debugfs_done;
 	}
-
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-	atomic_set(&idev->event_idx, -1);
-	idev->buffer_debug_file = debugfs_create_file("buffer", 0444,
-						 idev->debug_root, idev,
-						 &debug_buffer_fops);
-	if (!idev->buffer_debug_file) {
-		pr_err("%s: failed to create buffer debug file\n", __func__);
-		goto debugfs_done;
-	}
-
-	idev->event_debug_file = debugfs_create_file("event", 0444,
-						 idev->debug_root, idev,
-						 &debug_event_fops);
-	if (!idev->event_debug_file)
-		pr_err("%s: failed to create event debug file\n", __func__);
-#endif
 
 debugfs_done:
 

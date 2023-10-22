@@ -76,8 +76,7 @@ enum ipi_msg_type {
 	IPI_CPU_STOP,
 	IPI_TIMER,
 	IPI_IRQ_WORK,
-	IPI_WAKEUP,
-	IPI_SGI_15_IRQ = 15
+	IPI_WAKEUP
 };
 
 /*
@@ -830,11 +829,6 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		pr_debug("%s: IPI_WAKEUP\n", __func__);
 		break;
 
-	case IPI_SGI_15_IRQ:
-		pr_debug("%s: Interrupt masking bit of core [%dth] is cleared by "
-			"force EL3 to print out kernel panic message.\n"
-			, __func__, smp_processor_id());
-		break;
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
 		break;
@@ -873,16 +867,13 @@ void smp_send_stop(void)
 		smp_cross_call(&mask, IPI_CPU_STOP);
 	}
 
-	/* Wait up to 5 seconds for other CPUs to stop */
-	timeout = USEC_PER_SEC * 5;
+	/* Wait up to one seconds for other CPUs to stop */
+	timeout = USEC_PER_SEC;
 	while (num_online_cpus() > 1 && timeout--)
 		udelay(1);
 
-	if (num_online_cpus() > 1) {
+	if (num_online_cpus() > 1)
 		pr_warning("SMP: failed to stop secondary CPUs\n");
-	} else {
-		pr_info("SMP: completed to stop secondary CPUS\n");
-	}
 }
 
 /*

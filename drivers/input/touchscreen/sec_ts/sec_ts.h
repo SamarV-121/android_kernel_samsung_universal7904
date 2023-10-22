@@ -50,10 +50,6 @@
 #include <linux/sec_sysfs.h>
 #endif
 
-#ifdef CONFIG_INPUT_BOOSTER
-#include <linux/input/input_booster.h>
-#endif
-
 #ifdef CONFIG_SECURE_TOUCH
 #include <linux/atomic.h>
 #include <linux/clk.h>

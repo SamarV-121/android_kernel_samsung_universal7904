@@ -1105,6 +1105,7 @@ static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,
 	return count;
 }
 
+
 static int __init pm_qos_power_init(void)
 {
 	int ret = 0;

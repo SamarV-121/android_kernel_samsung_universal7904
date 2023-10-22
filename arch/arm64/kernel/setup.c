@@ -69,10 +69,6 @@
 #include <soc/samsung/ect_parser.h>
 #endif
 
-#ifdef CONFIG_UH
-#include <linux/uh.h>
-#endif
-
 phys_addr_t __fdt_pointer __initdata;
 
 /*
@@ -365,16 +361,7 @@ void __init setup_arch(char **cmdline_p)
 
 	/* Parse the ACPI tables for possible boot-time configuration */
 	acpi_boot_table_init();
-#ifdef CONFIG_UH
-#ifdef CONFIG_KNOX_KAP
-	if (boot_mode_security)
-		uh_init();
-	else
-		uh_disable();
-#else
-	uh_init();
-#endif
-#endif
+
 	paging_init();
 	relocate_initrd();
 
@@ -416,14 +403,12 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
-#if !(defined CONFIG_RELOCATABLE_KERNEL) && !(defined CONFIG_RANDOMIZE_BASE)
 	if (boot_args[1] || boot_args[2] || boot_args[3]) {
 		pr_err("WARNING: x1-x3 nonzero in violation of boot protocol:\n"
 			"\tx1: %016llx\n\tx2: %016llx\n\tx3: %016llx\n"
 			"This indicates a broken bootloader or old kernel\n",
 			boot_args[1], boot_args[2], boot_args[3]);
 	}
-#endif
 }
 
 static int __init arm64_device_init(void)

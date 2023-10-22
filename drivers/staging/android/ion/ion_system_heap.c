@@ -312,49 +312,6 @@ static int ion_system_heap_debug_show(struct ion_heap *heap, struct seq_file *s,
 	return 0;
 }
 
-void show_ion_system_heap_size(struct seq_file *s)
-{
-	struct ion_heap *heap;
-	unsigned long system_byte = 0;
-
-	if (!system_heap) {
-		pr_err("system_heap is not ready\n");
-		return;
-	}
-
-	heap = &system_heap->heap;
-	system_byte = (unsigned long)atomic_long_read(&heap->total_allocated);
-	if (s)
-		seq_printf(s, "SystemHeap:     %8lu kB\n", system_byte >> 10);
-	else
-		pr_cont("SystemHeap:%lukB ", system_byte >> 10);
-}
-
-void show_ion_system_heap_pool_size(struct seq_file *s)
-{
-	unsigned long pool_size = 0;
-	struct ion_page_pool *pool;
-	int i;
-
-	if (!system_heap) {
-		pr_err("system_heap_pool is not ready\n");
-		return;
-	}
-
-	for (i = 0; i < num_orders * 2; i++) {
-		pool = system_heap->pools[i];
-		pool_size += (1 << pool->order) * pool->high_count;
-		pool_size += (1 << pool->order) * pool->low_count;
-	}
-
-	if (s)
-		seq_printf(s, "SystemHeapPool: %8lu kB\n",
-			   pool_size << (PAGE_SHIFT - 10));
-	else
-		pr_cont("SystemHeapPool:%lukB ",
-			pool_size << (PAGE_SHIFT - 10));
-}
-
 static ssize_t ion_system_heap_orders_show(struct kobject *kobj,
 				 struct kobj_attribute *attr, char *buf)
 {

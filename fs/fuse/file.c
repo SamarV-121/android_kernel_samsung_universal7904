@@ -371,7 +371,7 @@ static int fuse_wait_on_page_writeback(struct inode *inode, pgoff_t index)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
 
-	fuse_wait_event(fi->page_waitq, !fuse_page_is_writeback(inode, index));
+	wait_event(fi->page_waitq, !fuse_page_is_writeback(inode, index));
 	return 0;
 }
 
@@ -1616,15 +1616,11 @@ int fuse_write_inode(struct inode *inode, struct writeback_control *wbc)
 	struct fuse_file *ff;
 	int err;
 
-	/* @fs.sec -- E8B3F75DDB82DFE8F52508F039ABE4FF -- */
-	current->flags |= PF_NOFS_MASK;
-
 	ff = __fuse_write_file_get(fc, fi);
 	err = fuse_flush_times(inode, ff);
 	if (ff)
 		fuse_file_put(ff, 0);
 
-	current->flags &= ~PF_NOFS_MASK;
 	return err;
 }
 

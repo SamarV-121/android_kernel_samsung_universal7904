@@ -28,16 +28,6 @@
 
 static DEFINE_SPINLOCK(fmp_tfm_lock);
 
-#ifdef CONFIG_CRYPTO_FIPS
-static int calculate_sha256(struct crypto_hash *hash_tfm, char *dst, char *src, int len)
-{
-	if ((src == NULL) || (dst == NULL))
-		return -EINVAL;
-
-	return sha256(src, len, dst);
-}
-#endif
-
 static int calculate_md5(struct exynos_fmp *fmp,
 		struct crypto_hash *hash_tfm, char *dst, char *src, int len)
 {
@@ -107,14 +97,8 @@ static int derive_iv(struct exynos_fmp *fmp,
 	memset(src + FMP_MAX_IV_BYTES, 0, FMP_MAX_OFFSET_BYTES);
 	snprintf(src + FMP_MAX_IV_BYTES, FMP_MAX_OFFSET_BYTES, "%lld", offset);
 
-#ifdef CONFIG_CRYPTO_FIPS
-	if (mapping->cc_enable)
-		ret = calculate_sha256(mapping->hash_tfm, extent_iv, src,
-				FMP_MAX_IV_BYTES + FMP_MAX_OFFSET_BYTES);
-	else
-#endif
-		ret = calculate_md5(fmp, mapping->hash_tfm, extent_iv, src,
-				FMP_MAX_IV_BYTES + FMP_MAX_OFFSET_BYTES);
+	ret = calculate_md5(fmp, mapping->hash_tfm, extent_iv, src,
+			    FMP_MAX_IV_BYTES + FMP_MAX_OFFSET_BYTES);
 	if (ret) {
 		dev_err(fmp->dev, "%s: Error attempting to compute generating IV(%d)\n",
 				__func__, ret);

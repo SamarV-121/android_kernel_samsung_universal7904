@@ -751,16 +751,6 @@ void ext4_mb_generate_buddy(struct super_block *sb,
 	grp->bb_fragments = fragments;
 
 	if (free != grp->bb_free) {
-		/* for more specific debugging, sangwoo2.lee */
-		struct ext4_group_desc *desc;
-		ext4_fsblk_t bitmap_blk;
-
-		desc = ext4_get_group_desc(sb, group, NULL);
-		bitmap_blk = ext4_block_bitmap(sb, desc);
-
-		print_block_data(sb, bitmap_blk, bitmap, 0, EXT4_BLOCK_SIZE(sb));
-		/* for more specific debugging */
-
 		ext4_grp_locked_error(sb, group, 0, 0,
 				      "block bitmap and bg descriptor "
 				      "inconsistent: %u vs %u free clusters",
@@ -1467,19 +1457,10 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 
 	if (unlikely(block != -1)) {
 		struct ext4_sb_info *sbi = EXT4_SB(sb);
-		/* for debugging, sangwoo2.lee */
-		struct ext4_group_desc *desc;
-		ext4_fsblk_t blocknr, bitmap_blk;
-
-		desc = ext4_get_group_desc(sb, e4b->bd_group, NULL);
-		bitmap_blk = ext4_block_bitmap(sb, desc);
+		ext4_fsblk_t blocknr;
 
 		blocknr = ext4_group_first_block_no(sb, e4b->bd_group);
 		blocknr += EXT4_C2B(EXT4_SB(sb), block);
-
-		print_block_data(sb, bitmap_blk, e4b->bd_bitmap, 0
-			, EXT4_BLOCK_SIZE(sb));
-		/* for debugging */
 		ext4_grp_locked_error(sb, e4b->bd_group,
 				      inode ? inode->i_ino : 0,
 				      blocknr,
@@ -2378,55 +2359,6 @@ const struct file_operations ext4_seq_mb_groups_fops = {
 	.release	= seq_release,
 };
 
-ssize_t ext4_mb_freefrag_show(struct ext4_sb_info *sbi, char *buf)
-{
-#define EXT4_FREEFRAG_COLUMN 14 /* sb->s_blocksize_bits + 2 */
-	ext4_group_t group = 0;
-	int i;
-	ext4_fsblk_t freeblock[EXT4_FREEFRAG_COLUMN] = {0,};
-	char *size[EXT4_FREEFRAG_COLUMN] = {"4K","8K","16K","32K","64K",
-		"128K","256K","512K","1M","2M","4M","8M","16M","32M"};
-
-	for (group = 0; group < sbi->s_groups_count; group++) {
-		struct super_block *sb = sbi->s_sb;
-		int err, buddy_loaded = 0;
-		struct ext4_buddy e4b;
-		struct ext4_group_info *grinfo;
-		struct sg {
-			struct ext4_group_info info;
-			ext4_grpblk_t counters[EXT4_FREEFRAG_COLUMN+2];
-		} sg;
-
-		i = (sb->s_blocksize_bits + 2) * sizeof(sg.info.bb_counters[0]) +
-			sizeof(struct ext4_group_info);
-		grinfo = ext4_get_group_info(sb, group);
-		/* Load the group info in memory only if not already loaded. */
-		if (unlikely(EXT4_MB_GRP_NEED_INIT(grinfo))) {
-			err = ext4_mb_load_buddy(sb, group, &e4b);
-			if (err) {
-				freeblock[0] = ULLONG_MAX;
-				goto out;
-			}
-			buddy_loaded = 1;
-		}
-
-		memcpy(&sg, ext4_get_group_info(sb, group), i);
-
-		if (buddy_loaded)
-			ext4_mb_unload_buddy(&e4b);
-		for (i = 0; i < EXT4_FREEFRAG_COLUMN; i++)
-			freeblock[i] += (i <= sb->s_blocksize_bits + 1) ?
-					sg.info.bb_counters[i]: 0;
-	}
-out:
-	for (i=0; i < EXT4_FREEFRAG_COLUMN; i++)
-		snprintf(buf, PAGE_SIZE, "%s\"%s\":\"%llu\",", buf, size[i],
-			(unsigned long long)freeblock[i]);
-	buf[strlen(buf)-1] = '\n';
-
-	return strlen(buf);
-}
-
 static struct kmem_cache *get_groupinfo_cache(int blocksize_bits)
 {
 	int cache_index = blocksize_bits - EXT4_MIN_BLOCK_LOG_SIZE;
@@ -2514,7 +2446,7 @@ int ext4_mb_add_groupinfo(struct super_block *sb, ext4_group_t group,
 	 * empty groups without initialization
 	 */
 	if (ext4_has_group_desc_csum(sb) &&
-		(desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
+	    (desc->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
 		meta_group_info[i]->bb_free =
 			ext4_free_clusters_after_init(sb, group, desc);
 	} else {
@@ -2858,8 +2790,7 @@ static inline int ext4_issue_discard(struct super_block *sb,
 			(sector_t)count << (sb->s_blocksize_bits - 9),
 			GFP_NOFS, flags, biop);
 	} else
-		return sb_issue_discard(sb, discard_block, count,
-					GFP_NOFS, flags);
+		return sb_issue_discard(sb, discard_block, count, GFP_NOFS, flags);
 }
 
 static void ext4_free_data_in_buddy(struct super_block *sb,
@@ -3080,7 +3011,7 @@ ext4_mb_mark_diskspace_used(struct ext4_allocation_context *ac,
 	ext4_set_bits(bitmap_bh->b_data, ac->ac_b_ex.fe_start,
 		      ac->ac_b_ex.fe_len);
 	if (ext4_has_group_desc_csum(sb) &&
-		(gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
+	    (gdp->bg_flags & cpu_to_le16(EXT4_BG_BLOCK_UNINIT))) {
 		gdp->bg_flags &= cpu_to_le16(~EXT4_BG_BLOCK_UNINIT);
 		ext4_free_group_clusters_set(sb, gdp,
 					     ext4_free_clusters_after_init(sb,
@@ -4774,7 +4705,6 @@ ext4_mb_free_metadata(handle_t *handle, struct ext4_buddy *e4b,
 	spin_lock(&sbi->s_md_lock);
 	list_add_tail(&new_entry->efd_list, &sbi->s_freed_data_list);
 	spin_unlock(&sbi->s_md_lock);
-
 	return 0;
 }
 

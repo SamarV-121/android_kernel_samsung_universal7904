@@ -13,10 +13,6 @@
 
 #include <linux/fs.h>
 
-#if defined(CONFIG_EXT4CRYPT_SDP) || defined(CONFIG_DDAR)
-#include "fscrypt_knox_private.h"
-#endif
-
 #define EXT4_KEY_DESCRIPTOR_SIZE 8
 
 /* Policy provided via an ioctl on the topmost directory */
@@ -38,10 +34,6 @@ struct ext4_encryption_policy {
 #define EXT4_POLICY_FLAGS_PAD_MASK	0x03
 #define EXT4_POLICY_FLAGS_VALID		0x03
 
-#ifdef CONFIG_EXT4_PRIVATE_ENCRYPTION
-#define EXT4_POLICY_FLAGS_PRIVATE_ALGO	0x4
-#endif
-
 /**
  * Encryption context for inode
  *
@@ -60,9 +52,6 @@ struct ext4_encryption_context {
 	char flags;
 	char master_key_descriptor[EXT4_KEY_DESCRIPTOR_SIZE];
 	char nonce[EXT4_KEY_DERIVATION_NONCE_SIZE];
-#if defined(CONFIG_EXT4CRYPT_SDP) || defined(CONFIG_DDAR)
-	u32 knox_flags;
-#endif
 } __attribute__((__packed__));
 
 /* Encryption parameters */
@@ -75,8 +64,6 @@ struct ext4_encryption_context {
 #define EXT4_AES_256_HEH_KEY_SIZE 32
 #define EXT4_AES_256_XTS_KEY_SIZE 64
 #define EXT4_MAX_KEY_SIZE 64
-#define EXT4_PRIVATE_AES_256_XTS_KEY_SIZE 64
-#define EXT4_PRIVATE_AES_256_CBC_KEY_SIZE 32
 
 #define EXT4_KEY_DESC_PREFIX "ext4:"
 #define EXT4_KEY_DESC_PREFIX_SIZE 5
@@ -94,17 +81,7 @@ struct ext4_crypt_info {
 	char		ci_flags;
 	struct crypto_ablkcipher *ci_ctfm;
 	char		ci_master_key[EXT4_KEY_DESCRIPTOR_SIZE];
-	char 		raw_key[EXT4_MAX_KEY_SIZE];
-	int		private_enc_mode;
-
-#ifdef CONFIG_EXT4CRYPT_SDP
-	struct sdp_info *ci_sdp_info;
-#endif
 };
-
-#ifdef CONFIG_EXT4CRYPT_SDP
-#include "sdp/fscrypto_sdp_private.h"
-#endif
 
 #define EXT4_CTX_REQUIRES_FREE_ENCRYPT_FL             0x00000001
 #define EXT4_WRITE_PATH_FL			      0x00000002
@@ -145,13 +122,12 @@ static inline int ext4_encryption_key_size(int mode)
 		return EXT4_AES_256_CBC_KEY_SIZE;
 	case EXT4_ENCRYPTION_MODE_AES_256_CTS:
 		return EXT4_AES_256_CTS_KEY_SIZE;
-	case EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_XTS:
-	case EXT4_ENCRYPTION_MODE_PRIVATE:
-		return EXT4_PRIVATE_AES_256_XTS_KEY_SIZE;
-	case EXT4_PRIVATE_ENCRYPTION_MODE_AES_256_CBC:
-		return EXT4_PRIVATE_AES_256_CBC_KEY_SIZE;
 	case EXT4_ENCRYPTION_MODE_AES_256_HEH:
 		return EXT4_AES_256_HEH_KEY_SIZE;
+	case EXT4_ENCRYPTION_MODE_SPECK128_256_XTS:
+		return 64;
+	case EXT4_ENCRYPTION_MODE_SPECK128_256_CTS:
+		return 32;
 	default:
 		BUG();
 	}

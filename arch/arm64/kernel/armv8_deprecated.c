@@ -225,7 +225,7 @@ static int emulation_proc_handler(struct ctl_table *table, int write,
 		update_insn_emulation_mode(insn, INSN_UNDEF);
 	}
 ret:
-	 mutex_unlock(&insn_emulation_mutex);
+	mutex_unlock(&insn_emulation_mutex);
 	return ret;
 }
 

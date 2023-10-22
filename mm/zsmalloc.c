@@ -50,8 +50,6 @@
 #include <linux/mount.h>
 #include <linux/compaction.h>
 #include <linux/pagemap.h>
-#include <linux/swap.h>
-#include <linux/jiffies.h>
 
 #define ZSPAGE_MAGIC	0x58
 
@@ -169,9 +167,6 @@ static struct dentry *zs_stat_root;
 #ifdef CONFIG_COMPACTION
 static struct vfsmount *zsmalloc_mnt;
 #endif
-
-
-static int zs_page_migration_enabled = 1;
 
 /*
  * number of size_classes
@@ -351,6 +346,7 @@ static int create_cache(struct zs_pool *pool)
 
 static void destroy_cache(struct zs_pool *pool)
 {
+	kmem_cache_destroy(pool->handle_cachep);
 	kmem_cache_destroy(pool->zspage_cachep);
 }
 
@@ -433,11 +429,6 @@ static void *zs_zpool_map(void *pool, unsigned long handle,
 	case ZPOOL_MM_RO:
 		zs_mm = ZS_MM_RO;
 		break;
-#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
-	case ZPOOL_MM_RO_NOWAIT:
-		zs_mm = ZS_MM_RO_NOWAIT;
-		break;
-#endif
 	case ZPOOL_MM_WO:
 		zs_mm = ZS_MM_WO;
 		break;
@@ -541,7 +532,7 @@ static void get_zspage_mapping(struct zspage *zspage,
 				unsigned int *class_idx,
 				enum fullness_group *fullness)
 {
-	VM_BUG_ON(zspage->magic != ZSPAGE_MAGIC);
+	BUG_ON(zspage->magic != ZSPAGE_MAGIC);
 
 	*fullness = zspage->fullness;
 	*class_idx = zspage->class;
@@ -734,7 +725,6 @@ static inline void zs_pool_stat_destroy(struct zs_pool *pool)
 #endif
 
 
-
 /*
  * For each size class, zspages are divided into different groups
  * depending on how "full" they are. This was done so that we could
@@ -877,7 +867,7 @@ static struct zspage *get_zspage(struct page *page)
 {
 	struct zspage *zspage = (struct zspage *)page->private;
 
-	VM_BUG_ON(zspage->magic != ZSPAGE_MAGIC);
+	BUG_ON(zspage->magic != ZSPAGE_MAGIC);
 	return zspage;
 }
 
@@ -1426,15 +1416,7 @@ void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 	WARN_ON_ONCE(in_interrupt());
 
 	/* From now on, migration cannot move the object */
-#ifdef CONFIG_ZSWAP_SAME_PAGE_SHARING
-	if (mm == ZS_MM_RO_NOWAIT) {
-		if (!trypin_tag(handle))
-			return NULL;
-	} else
-		pin_tag(handle);
-#else
 	pin_tag(handle);
-#endif
 
 	obj = handle_to_obj(handle);
 	obj_to_location(obj, &page, &obj_idx);
@@ -1598,7 +1580,6 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 
 	spin_lock(&class->lock);
 	zspage = find_get_zspage(class);
-
 	if (likely(zspage)) {
 		obj = obj_malloc(class, zspage, handle);
 		/* Now move the zspage to another fullness group, if required */
@@ -2012,9 +1993,6 @@ bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 	 * Page is locked so zspage couldn't be destroyed. For detail, look at
 	 * lock_zspage in free_zspage.
 	 */
-	if (!zs_page_migration_enabled)
-		return false;
-
 	VM_BUG_ON_PAGE(!PageMovable(page), page);
 	VM_BUG_ON_PAGE(PageIsolated(page), page);
 
@@ -2392,9 +2370,6 @@ static unsigned long zs_shrinker_scan(struct shrinker *shrinker,
 	return pages_freed ? pages_freed : SHRINK_STOP;
 }
 
-#define ZS_SHRINKER_THRESHOLD	1024
-#define ZS_SHRINKER_INTERVAL	10
-
 static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 		struct shrink_control *sc)
 {
@@ -2403,10 +2378,6 @@ static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 	unsigned long pages_to_free = 0;
 	struct zs_pool *pool = container_of(shrinker, struct zs_pool,
 			shrinker);
-	static unsigned long time_stamp;
-
-	if (!current_is_kswapd() || time_is_after_jiffies(time_stamp))
-		return 0;
 
 	for (i = zs_size_classes - 1; i >= 0; i--) {
 		class = pool->size_class[i];
@@ -2417,11 +2388,6 @@ static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 
 		pages_to_free += zs_can_compact(class);
 	}
-
-	if (pages_to_free > ZS_SHRINKER_THRESHOLD)
-		time_stamp = jiffies + (ZS_SHRINKER_INTERVAL * HZ);
-	else
-		pages_to_free = 0;
 
 	return pages_to_free;
 }

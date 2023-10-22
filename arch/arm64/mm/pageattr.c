@@ -70,7 +70,6 @@ static int change_memory_common(unsigned long addr, int numpages,
 		WARN_ON_ONCE(1);
 	}
 
-#ifndef CONFIG_SEC_MMIOTRACE
 	/*
 	 * Kernel VA mappings are always live, and splitting live section
 	 * mappings into page mappings may cause TLB conflicts. This means
@@ -89,30 +88,12 @@ static int change_memory_common(unsigned long addr, int numpages,
 	    end > (unsigned long)area->addr + area->size ||
 	    !(area->flags & VM_ALLOC))
 		return -EINVAL;
-#endif
 
 	if (!numpages)
 		return 0;
 
 	return __change_memory_common(start, size, set_mask, clear_mask);
 }
-
-#ifdef CONFIG_SEC_MMIOTRACE
-int set_memory_valid_n(unsigned long addr, int numpages)
-{
-	return change_memory_common(addr, numpages,
-					__pgprot(PTE_VALID),
-					__pgprot(PTE_PROT_NONE));
-}
-EXPORT_SYMBOL_GPL(set_memory_valid);
-
-int set_memory_invalid_n(unsigned long addr, int numpages)
-{
-	return change_memory_common(addr, numpages,
-					__pgprot(PTE_PROT_NONE),
-					__pgprot(PTE_VALID));
-}
-#endif
 
 int set_memory_ro(unsigned long addr, int numpages)
 {

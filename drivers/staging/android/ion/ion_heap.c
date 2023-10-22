@@ -155,16 +155,12 @@ int ion_heap_buffer_zero(struct ion_buffer *buffer)
 	pgprot_t pgprot;
 	int ret;
 
-	ION_EVENT_BEGIN();
-
 	if (buffer->flags & ION_FLAG_CACHED)
 		pgprot = PAGE_KERNEL;
 	else
 		pgprot = pgprot_writecombine(PAGE_KERNEL);
 
 	ret = ion_heap_sglist_zero(table->sgl, table->nents, pgprot);
-
-	ION_EVENT_CLEAR(buffer, ION_EVENT_DONE());
 
 	return ret;
 }

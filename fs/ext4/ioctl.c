@@ -18,10 +18,6 @@
 #include "ext4_jbd2.h"
 #include "ext4.h"
 
-#ifdef CONFIG_EXT4CRYPT_SDP
-#include "sdp/fscrypto_sdp_ioctl.h"
-#endif
-
 #define MAX_32_NUM ((((unsigned long long) 1) << 32) - 1)
 
 /**
@@ -707,15 +703,6 @@ encryption_policy_out:
 		return -EOPNOTSUPP;
 #endif
 	}
-#ifdef CONFIG_EXT4CRYPT_SDP
-	case EXT4_IOC_GET_SDP_INFO:
-	case EXT4_IOC_SET_SDP_POLICY:
-	case EXT4_IOC_SET_SENSITIVE:
-	case EXT4_IOC_SET_PROTECTED:
-	case EXT4_IOC_ADD_CHAMBER:
-	case EXT4_IOC_REMOVE_CHAMBER:
-		return fscrypt_sdp_ioctl(filp, cmd, arg);
-#endif
 	default:
 		return -ENOTTY;
 	}
@@ -782,14 +769,6 @@ long ext4_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case EXT4_IOC_SET_ENCRYPTION_POLICY:
 	case EXT4_IOC_GET_ENCRYPTION_PWSALT:
 	case EXT4_IOC_GET_ENCRYPTION_POLICY:
-#ifdef CONFIG_EXT4CRYPT_SDP
-	case EXT4_IOC_GET_SDP_INFO:
-	case EXT4_IOC_SET_SDP_POLICY:
-	case EXT4_IOC_SET_SENSITIVE:
-	case EXT4_IOC_SET_PROTECTED:
-	case EXT4_IOC_ADD_CHAMBER:
-	case EXT4_IOC_REMOVE_CHAMBER:
-#endif
 		break;
 	default:
 		return -ENOIOCTLCMD;

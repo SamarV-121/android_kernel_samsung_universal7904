@@ -938,19 +938,6 @@ config HID_SENSOR_CUSTOM_SENSOR
 	  standard sensors.
 	  Select this config option for custom/generic sensor support.
 
-config HID_OVR
-	tristate "OVR device support"
-	depends on USB_HID
-	---help---
-	Support for OVR devices.
-	Say Y here if you have a OVR device.
-
-config HID_MADCATZ
-	tristate "Madcatz wireless game controller support"
-	depends on (USB_HID || HID)
-	---help---
-	Support for Madcatz wireless game controller support.	
-
 endmenu
 
 endif # HID

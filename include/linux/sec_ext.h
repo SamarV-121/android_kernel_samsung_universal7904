@@ -47,21 +47,9 @@ extern void sec_bootstat_get_thermal(int *temp);
 #define sec_bootstat_add(a)			do { } while(0)
 #define sec_bootstat_add_initcall(a)		do { } while(0)
 
-#define sec_bootstat_get_cpuinfo(a,b)		do { } while(0)	
-#define sec_bootstat_get_thermal(a)		do { } while(0)	
+#define sec_bootstat_get_cpuinfo(a,b)		do { } while(0)
+#define sec_bootstat_get_thermal(a)		do { } while(0)
 #endif /* CONFIG_SEC_BOOT_STAT */
-
-/*
- * Initcall log @ /proc/initcall_debug
- * show a sorted execution time list of initcalls.
- */
-#ifdef CONFIG_SEC_INITCALL_DEBUG
-#define SEC_INITCALL_DEBUG_MIN_TIME		10000
-extern void sec_initcall_debug_add(initcall_t fn, unsigned long long t);
-#else
-#define sec_initcall_debug_add(a,b)		do { } while(0)	
-#endif /* CONFIG_SEC_INITCALL_DEBUG */
-
 
 /*
  * Param op.

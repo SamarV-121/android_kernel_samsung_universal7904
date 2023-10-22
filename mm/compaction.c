@@ -861,9 +861,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		/* Successfully isolated */
 		del_page_from_lru_list(page, lruvec, page_lru(page));
 
-
 isolate_success:
-
 		list_add(&page->lru, migratelist);
 		cc->nr_migratepages++;
 		nr_isolated++;
@@ -1741,7 +1739,7 @@ static void compact_node(int nid)
 {
 	struct compact_control cc = {
 		.order = -1,
-		.mode = MIGRATE_SYNC_LIGHT,
+		.mode = MIGRATE_SYNC,
 		.ignore_skip_hint = true,
 	};
 
@@ -1767,17 +1765,8 @@ int sysctl_compact_memory;
 int sysctl_compaction_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *length, loff_t *ppos)
 {
-	if (write) {
-		pr_info("compact_memory start.(%d times so far)\n",
-			sysctl_compact_memory);
-		sysctl_compact_memory++;
+	if (write)
 		compact_nodes();
-		pr_info("compact_memory done.(%d times so far)\n",
-			sysctl_compact_memory);
-	}
-	else
-		proc_dointvec(table, write, buffer, length, ppos);
-
 	return 0;
 }
 

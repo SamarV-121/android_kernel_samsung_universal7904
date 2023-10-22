@@ -43,7 +43,6 @@
 #include <linux/slab.h>
 #include <linux/random.h>
 #include <linux/err.h>
-#include <linux/freezer.h>
 #include <asm/uaccess.h>
 
 
@@ -406,8 +405,6 @@ static int __init register_miscdev(void)
 static int hwrng_fillfn(void *unused)
 {
 	long rc;
-
-	set_freezable();
 
 	while (!kthread_should_stop()) {
 		struct hwrng *rng;

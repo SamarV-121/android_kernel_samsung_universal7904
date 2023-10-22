@@ -89,11 +89,7 @@ _head:
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
-#ifdef CONFIG_PROCA
-	le64sym	_proca_conf_offset		// memory info for proca ta
-#else
-	.quad	0xecefecef			// Magic number for proca ta
-#endif
+	.quad	0				// reserved
 	.quad	0				// reserved
 	.byte	0x41				// Magic number, "ARM\x64"
 	.byte	0x52
@@ -214,17 +210,10 @@ section_table:
 #endif
 
 ENTRY(stext)
-#ifdef CONFIG_RELOCATABLE_KERNEL
-	mov	x22, x1				// x1=PHYS_OFFSET
-	mov	x19, x2				// x2=real TEXT_OFFSET
-	adr	x21, __boot_kernel_offset
-	stp	x1, x2, [x21]
-#endif
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	adrp	x24, __PHYS_OFFSET
 	and	x23, x24, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
-
 	bl	set_cpu_boot_mode_flag
 	bl	__create_page_tables		// x25=TTBR0, x26=TTBR1
 	/*
@@ -239,7 +228,7 @@ ENTRY(stext)
 	mov_q	x12, KIMAGE_VADDR
 	add	x27, x27, x12			// convert to VA
 	add	x27, x27, x23
-	
+
 	adr_l	lr, __enable_mmu		// return (PIC) address
 	b	__cpu_setup			// initialise processor
 ENDPROC(stext)
@@ -452,7 +441,7 @@ __mmap_switched:
 	bl	__pi_memset
 	dsb	ishst				// Make zero page visible to PTW
 
-#if defined (CONFIG_RELOCATABLE) || defined(CONFIG_RELOCATABLE_KERNEL)
+#ifdef CONFIG_RELOCATABLE
 
 	/*
 	 * Iterate over each entry in the relocation table, and apply the
@@ -638,15 +627,6 @@ ENTRY(set_cpu_boot_mode_flag)
 	dc	ivac, x1			// Invalidate potentially stale cache line
 	ret
 ENDPROC(set_cpu_boot_mode_flag)
-
-#ifdef CONFIG_RELOCATABLE_KERNEL
-	.pushsection	.text
-ENTRY(__boot_kernel_offset)
-	.quad	0     	//Kernel Physical Address
-	.quad	0	//Kernel TEXT_OFFSET
-	.quad 	TEXT_OFFSET
-	.popsection
-#endif
 
 /*
  * We need to find out the CPU boot mode long after boot, so we need to

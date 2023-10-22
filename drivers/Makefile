@@ -199,21 +199,14 @@ obj-y                           += motor/
 obj-y	+= ccic/
 obj-$(CONFIG_TEE)		+= tee/
 
-#Sensorhub
+# Sensorhub
 obj-$(CONFIG_SENSORS_SSP)       += sensorhub/
 
-#Sensor
+# Sensor
 obj-$(CONFIG_SENSORS)		+= sensors/
 
-#Fingerprint
+# Fingerprint
 obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
-
-# UH
-obj-$(CONFIG_UH) 		+= uh/
-
-# FIVE TEE driver
-obj-$(CONFIG_FIVE_TEE_DRIVER)	+= security/samsung/five_tee_driver/
-obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
 
 # streamline
 ifeq ($(CONFIG_GATOR), y)
@@ -223,5 +216,5 @@ endif
 # GNSS
 obj-$(CONFIG_GPS_BCM4753)	+= gps/
 
-#TZIC
+# TZIC
 obj-y  += security/samsung/tzic/

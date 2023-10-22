@@ -55,14 +55,8 @@
 #include "queue.h"
 #include "../host/dw_mmc.h"
 #include "../host/dw_mmc-exynos.h"
-#if defined(CONFIG_SEC_ABC)  
+#if defined(CONFIG_SEC_ABC)
 #include <linux/sti/abc_common.h>
-#endif
-
-#ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/fslog.h>
-#else
-#define ST_LOG(fmt,...)
 #endif
 
 MODULE_ALIAS("mmc:block");
@@ -2656,27 +2650,7 @@ static int mmc_blk_issue_flush(struct mmc_queue *mq, struct request *req)
 	if (!req)
 		return 0;
 
-	if (req->cmd_flags & REQ_BARRIER) {
-		/*
-		 * If eMMC cache flush policy is set to 1, then the device
-		 * shall flush the requests in First-In-First-Out (FIFO) order.
-		 * In this case, as per spec, the host must not send any cache
-		 * barrier requests as they are redundant and add unnecessary
-		 * overhead to both device and host.
-		 */
-		if (card->ext_csd.cache_flush_policy & 1)
-			goto end_req;
-
-		/*
-		 * In case barrier is not supported or enabled in the device,
-		 * use flush as a fallback option.
-		 */
-		ret = mmc_cache_barrier(card);
-		if (ret)
-			ret = mmc_flush_cache(card);
-	 } else if (req->cmd_flags & REQ_FLUSH) {
-		ret = mmc_flush_cache(card);
-	 }
+	ret = mmc_flush_cache(card);
 	if (ret == -ENODEV) {
 		pr_err("%s: %s: restart mmc card",
 				req->rq_disk->disk_name, __func__);
@@ -2710,7 +2684,6 @@ static int mmc_blk_issue_flush(struct mmc_queue *mq, struct request *req)
 		}
 	}
 #endif
-end_req:
 	blk_end_request_all(req, ret);
 
 	return ret ? 0 : 1;
@@ -3398,8 +3371,6 @@ static struct mmc_cmdq_req *mmc_cmdq_prep_dcmd(
 
 #define IS_RT_CLASS_REQ(x)     \
 	(IOPRIO_PRIO_CLASS(req_get_ioprio(x)) == IOPRIO_CLASS_RT)
-SIO_PATCH_VERSION(eMMC_CP, 1, 0, "");
-/* IOPP-emmc_cp-v1.0.4.4 */
 
 static struct mmc_cmdq_req *mmc_blk_cmdq_rw_prep(
 		struct mmc_queue_req *mqrq, struct mmc_queue *mq)
@@ -4281,7 +4252,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 			ret = mmc_blk_issue_secdiscard_rq(mq, req);
 		else
 			ret = mmc_blk_issue_discard_rq(mq, req);
-	} else if (cmd_flags & (REQ_FLUSH | REQ_BARRIER)) {
+	} else if (cmd_flags & REQ_FLUSH) {
 		/* complete ongoing async transfer before issuing flush */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
@@ -4753,9 +4724,6 @@ static int mmc_blk_probe(struct mmc_card *card)
 	string_get_size((u64)get_capacity(md->disk), 512, STRING_UNITS_2,
 			cap_str, sizeof(cap_str));
 	pr_info("%s: %s %s %s %s\n",
-		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
-		cap_str, md->read_only ? "(ro)" : "");
-	ST_LOG("%s: %s %s %s %s\n",
 		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
 		cap_str, md->read_only ? "(ro)" : "");
 

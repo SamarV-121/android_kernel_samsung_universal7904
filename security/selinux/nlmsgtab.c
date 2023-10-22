@@ -83,7 +83,7 @@ static struct nlmsg_perm nlmsg_tcpdiag_perms[] =
 	{ TCPDIAG_GETSOCK,	NETLINK_TCPDIAG_SOCKET__NLMSG_READ },
 	{ DCCPDIAG_GETSOCK,	NETLINK_TCPDIAG_SOCKET__NLMSG_READ },
 	{ SOCK_DIAG_BY_FAMILY,	NETLINK_TCPDIAG_SOCKET__NLMSG_READ },
-	{ SOCK_DESTROY_BACKPORT, NETLINK_TCPDIAG_SOCKET__NLMSG_WRITE },
+	{ SOCK_DESTROY_BACKPORT,NETLINK_TCPDIAG_SOCKET__NLMSG_WRITE },
 };
 
 static struct nlmsg_perm nlmsg_xfrm_perms[] =
@@ -190,28 +190,4 @@ int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm)
 	}
 
 	return err;
-}
-
-static void nlmsg_set_getlink_perm(u32 perm)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(nlmsg_route_perms); i++) {
-		if (nlmsg_route_perms[i].nlmsg_type == RTM_GETLINK) {
-			nlmsg_route_perms[i].perm = perm;
-			break;
-		}
-	}
-}
-
-/**
- * Use nlmsg_readpriv as the permission for RTM_GETLINK messages if the
- * netlink_route_getlink policy capability is set. Otherwise use nlmsg_read.
- */
-void selinux_nlmsg_init(void)
-{
-	if (selinux_android_netlink_route)
-		nlmsg_set_getlink_perm(NETLINK_ROUTE_SOCKET__NLMSG_READPRIV);
-	else
-		nlmsg_set_getlink_perm(NETLINK_ROUTE_SOCKET__NLMSG_READ);
 }

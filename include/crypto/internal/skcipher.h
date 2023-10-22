@@ -67,8 +67,6 @@ static inline void crypto_set_skcipher_spawn(
 
 int crypto_grab_skcipher(struct crypto_skcipher_spawn *spawn, const char *name,
 			 u32 type, u32 mask);
-int crypto_grab_skcipher2(struct crypto_skcipher_spawn *spawn,
-			  const char *name, u32 type, u32 mask);
 
 struct crypto_alg *crypto_lookup_skcipher(const char *name, u32 type, u32 mask);
 

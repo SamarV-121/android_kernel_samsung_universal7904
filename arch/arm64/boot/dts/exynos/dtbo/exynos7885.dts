@@ -25,7 +25,6 @@
 #include "exynos7885-pm-domains.dtsi"
 #include "exynos7885-ess.dtsi"
 #include "exynos7885-camera.dtsi"
-#include "exynos7885-inputbooster.dtsi"
 #include "exynos7885-mali_common.dtsi"
 #include "exynos7885-pm-extra.dtsi"
 

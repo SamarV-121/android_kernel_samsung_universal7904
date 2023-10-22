@@ -115,7 +115,7 @@ x_tmp		.req	x8
 9998:
 	.endm
 
-	.macro clock_gettime_return, shift=0
+	.macro clock_gettime_return shift=0
 	.if \shift == 1
 	lsr	x11, x11, x12
 	.endif

@@ -116,21 +116,7 @@ struct ion_buffer {
 	int handle_count;
 	char task_comm[TASK_COMM_LEN];
 	pid_t pid;
-
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-	struct list_head master_list;
-	char thread_comm[TASK_COMM_LEN];
-	pid_t tid;
-#endif
 };
-
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-struct ion_task {
-	struct list_head list;
-	struct kref ref;
-	struct device *master;
-};
-#endif
 
 void ion_buffer_destroy(struct ion_buffer *buffer);
 
@@ -548,75 +534,5 @@ int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
  */
 void ion_pages_sync_for_device(struct device *dev, struct page *page,
 		size_t size, enum dma_data_direction dir);
-
-#ifdef CONFIG_ION_EXYNOS_STAT_LOG
-#define ION_EVENT_LOG_MAX	1024
-#define ION_EVENT_BEGIN()	ktime_t begin = ktime_get()
-#define ION_EVENT_DONE()	begin
-
-typedef enum ion_event_type {
-	ION_EVENT_TYPE_ALLOC = 0,
-	ION_EVENT_TYPE_FREE,
-	ION_EVENT_TYPE_MMAP,
-	ION_EVENT_TYPE_SHRINK,
-	ION_EVENT_TYPE_CLEAR,
-} ion_event_t;
-
-#define ION_EVENT_HEAPNAME	8
-struct ion_event_alloc {
-	void *id;
-	unsigned char heapname[ION_EVENT_HEAPNAME];
-	size_t size;
-	unsigned long flags;
-};
-
-struct ion_event_free {
-	void *id;
-	unsigned char heapname[ION_EVENT_HEAPNAME];
-	size_t size;
-	bool shrinker;
-};
-
-struct ion_event_mmap {
-	void *id;
-	unsigned char heapname[ION_EVENT_HEAPNAME];
-	size_t size;
-};
-
-struct ion_event_shrink {
-	size_t size;
-};
-
-struct ion_event_clear {
-	void *id;
-	unsigned char heapname[ION_EVENT_HEAPNAME];
-	size_t size;
-	unsigned long flags;
-};
-
-struct ion_eventlog {
-	ion_event_t type;
-	union {
-		struct ion_event_alloc alloc;
-		struct ion_event_free free;
-		struct ion_event_mmap mmap;
-		struct ion_event_shrink shrink;
-		struct ion_event_clear clear;
-	} data;
-	ktime_t begin;
-	ktime_t done;
-};
-
-void ION_EVENT_SHRINK(struct ion_device *dev, size_t size);
-void ION_EVENT_CLEAR(struct ion_buffer *buffer, ktime_t begin);
-
-#else
-void show_ion_system_heap_size(struct seq_file *s);
-void show_ion_system_heap_pool_size(struct seq_file *s);
-#define ION_EVENT_BEGIN()		do { } while (0)
-#define ION_EVENT_DONE()		do { } while (0)
-#define ION_EVENT_SHRINK(dev, size)	do { } while (0)
-#define ION_EVENT_CLEAR(buffer, begin)	do { } while (0)
-#endif
 
 #endif /* _ION_PRIV_H */

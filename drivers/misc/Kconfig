@@ -547,18 +547,6 @@ config EXYNOS_IMA
 	help
 	  IVA Memory Allocator for sharing SRAM resources.
 
-config TIMA_LOG
-	tristate "Support for dumping TIMA log"
-	depends on TIMA
-	default y
-	help
-	  This option enables support for dumping TIMA log.
-config KNOX_KAP
-	bool "Enable KNOX KAP mode"
-	default n
-	help
-	  Knox Active Protection mode
-
 config MEMORY_STATE_TIME
 	tristate "Memory freq/bandwidth time statistics"
 	depends on PROFILING

@@ -24,9 +24,6 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/io.h>
-#ifdef CONFIG_SEC_MMIOTRACE
-#include <linux/sec_mmiotrace.h>
-#endif
 
 #include <asm/fixmap.h>
 #include <asm/tlbflush.h>
@@ -75,10 +72,6 @@ static void __iomem *__ioremap_caller(phys_addr_t phys_addr, size_t size,
 		return NULL;
 	}
 
-#ifdef CONFIG_SEC_MMIOTRACE
-	mmiotrace_add_ioremap(phys_addr, offset + addr, size);
-#endif
-
 	ecd_hook_ioremap(phys_addr, offset + addr, size);
 
 	return (void __iomem *)(offset + addr);
@@ -103,9 +96,6 @@ void __iounmap(volatile void __iomem *io_addr)
 		vunmap((void *)addr);
 		ecd_hook_iounmap((unsigned long)addr);
 	}
-#ifdef CONFIG_SEC_MMIOTRACE
-	mmiotrace_remove_ioremap((unsigned long)io_addr);
-#endif
 }
 EXPORT_SYMBOL(__iounmap);
 

@@ -271,35 +271,14 @@ alternative_else_nop_endif
 	b.eq	3f
 
 #ifdef CONFIG_ARM64_ERRATUM_845719
-alternative_if_not ARM64_WORKAROUND_845719
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-#ifdef CONFIG_PID_IN_CONTEXTIDR
-	nop
-#endif
-alternative_else
-	tbz	x22, #4, 1f
-
-	/* skip ERRATUM non-CA53 core */
-	mrs	x29, midr_el1
-	lsr	x29, x29, #0x4			// part number shift
-	and	x29, x29, #0xfff		// part number mask
-	cmp	x29, #0xd03			// ARMV8_CORTEXA53
-	b.ne	1f
-
+alternative_if ARM64_WORKAROUND_845719
 #ifdef CONFIG_PID_IN_CONTEXTIDR
 	mrs	x29, contextidr_el1
 	msr	contextidr_el1, x29
 #else
 	msr contextidr_el1, xzr
 #endif
-1:
-alternative_endif
+alternative_else_nop_endif
 #endif
 3:
 	.endif
@@ -532,13 +511,6 @@ el1_da:
 	mrs	x3, far_el1
 	enable_dbg
 
-	/*
-	 * tlb conflict handling
-	*/
-	and	x24, x1, #ESR_EL1_ISS_DFSC_MASK
-	cmp	x24, #ESR_EL1_ISS_DFSC_TLB_CONFLICT
-	b.eq	el1_da_tlb_conflict
-
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq
@@ -549,10 +521,6 @@ el1_da:
 
 	// disable interrupts before pulling preserved data off the stack
 	disable_irq
-	kernel_exit 1
-el1_da_tlb_conflict:
-	tlbi vmalle1
-	dsb nsh
 	kernel_exit 1
 el1_sp_pc:
 	/*
@@ -568,7 +536,6 @@ el1_undef:
 	 */
 	enable_dbg
 	mov	x0, sp
-	mrs	x1, esr_el1			// read the syndrome register
 	b	do_undefinstr
 el1_dbg:
 	/*
@@ -784,7 +751,6 @@ el0_undef:
 	enable_dbg_and_irq
 	ct_user_exit
 	mov	x0, sp
-	mrs	x1, esr_el1			// read the syndrome register
 	bl	do_undefinstr
 	b	ret_to_user
 el0_sys:
@@ -967,29 +933,6 @@ el0_svc_naked:					// compat entry point
 	b.ne	__sys_trace
 	cmp     wscno, wsc_nr			// check upper syscall limit
 	b.hs	ni_sys
-#ifdef CONFIG_SECURITY_DEFEX
-/*
- * Defex enter hook
- */
-
-	ldr	x16, =defex_syscall_catch_enter
-	ldr	x16, [x16]
-	cmp	x16, xzr
-	b.eq	2f
-	uxtw	x0, wscno
-	mov	x1, sp
-	blr	x16
-
-	cbnz	w0, ret_fast_syscall		// block this syscall?
-#	adr	lr, ret_fast_syscall		// return address (not needed here)
-
-	ldp	x0, x1, [sp]			// restore the syscall args
-	ldp	x2, x3, [sp, #S_X2]
-	ldp	x4, x5, [sp, #S_X4]
-	ldp	x6, x7, [sp, #S_X6]
-
-2:
-#endif
 	mask_nospec64 xscno, xsc_nr, x19    // enforce bounds for syscall number
 	ldr	x16, [stbl, xscno, lsl #3]  // address in the syscall table
 	blr	x16				// call sys_* routine
@@ -1017,23 +960,6 @@ __sys_trace:
 	mov	x1, sp				// pointer to regs
 	cmp	wscno, wsc_nr			// check upper syscall limit
 	b.hs	__ni_sys_trace
-#ifdef CONFIG_SECURITY_DEFEX
-/*
- * Defex enter hook
- */
-
-	ldr	x16, =defex_syscall_catch_enter
-	ldr	x16, [x16]
-	cmp	x16, xzr
-	b.eq	3f
-	uxtw	x0, wscno
-	mov	x1, sp
-	blr	x16
-
-	cbnz	w0, __sys_trace_return		// block this syscall?
-#	adr	lr, __sys_trace_return		// return address (not neede here)
-3:
-#endif
 	ldp	x0, x1, [sp]			// restore the syscall args
 	ldp	x2, x3, [sp, #S_X2]
 	ldp	x4, x5, [sp, #S_X4]

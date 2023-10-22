@@ -22,7 +22,7 @@ config ARM64
 	select ARM_GIC_V3
 	select ARM_GIC_V3_ITS if PCI_MSI
 	select ARM_PSCI_FW
-	select BUILDTIME_EXTABLE_SORT if !RELOCATABLE_KERNEL
+	select BUILDTIME_EXTABLE_SORT
 	select CLONE_BACKWARDS
 	select COMMON_CLK
 	select CPU_PM if (SUSPEND || CPU_IDLE)
@@ -98,8 +98,8 @@ config ARM64
 	select SPARSE_IRQ
 	select SYSCTL_EXCEPTION_TRACE
 	select HAVE_CONTEXT_TRACKING
+	select THREAD_INFO_IN_TASK
 	select HAVE_ARM_SMCCC
-	select SECCOMP
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -183,7 +183,7 @@ config GENERIC_CALIBRATE_DELAY
 	def_bool y
 
 config ZONE_DMA
-	def_bool n
+	def_bool y
 
 config HAVE_GENERIC_RCU_GUP
 	def_bool y
@@ -725,13 +725,6 @@ config HOTPLUG_CPU
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
 
-config RELOCATABLE_KERNEL
-	bool "set kernel to relocatable in both virtual and physical address"
-	default n
-	help
-	  This configuare will allow you to config the kernel into position independent kernel, with '--PIE' insert into LD script.
-
-
 source kernel/Kconfig.preempt
 source kernel/Kconfig.hz
 
@@ -821,7 +814,7 @@ config FORCE_MAX_ZONEORDER
 
 config UNMAP_KERNEL_AT_EL0
 	bool "Unmap kernel when running in userspace (aka \"KAISER\")" if EXPERT
-	default n
+	default y
 	help
 	  Speculation attacks against some high-performance processors can
 	  be used to bypass MMU permission checks and leak kernel data to
@@ -927,6 +920,7 @@ menu "ARMv8.1 architectural features"
 
 config ARM64_HW_AFDBM
 	bool "Support for hardware updates of the Access and Dirty page flags"
+	default y
 	help
 	  The ARMv8.1 architecture extensions introduce support for
 	  hardware updates of the access and dirty information in page
@@ -943,6 +937,7 @@ config ARM64_HW_AFDBM
 
 config ARM64_PAN
 	bool "Enable support for Privileged Access Never (PAN)"
+	default y
 	help
 	 Privileged Access Never (PAN; part of the ARMv8.1 Extensions)
 	 prevents the kernel or hypervisor from accessing user-space (EL0)
@@ -1119,88 +1114,6 @@ config DMI
 	  This option is only useful on systems that have UEFI firmware.
 	  However, even with this option, the resultant kernel should
 	  continue to boot on existing non-UEFI platforms.
-
-config TIMA
-	bool "Enable TIMA(Trustzone based Integrity Measurement Archtecture feature"
-	default n
-
-config TIMA_LKMAUTH
-	bool "Enable LKM authentication by TIMA"
-	depends on MODULES
-	help
-	  TIMA authenticates loaded kernel modules. Disable it if you don't
-	  want TIMA enabled.
-
-config TIMA_LKM_BLOCK
-	bool "Block LKM by TIMA"
-	help
-	  LKM is disapproved by Samsung security policy.
-
-config TIMA_LKMAUTH_CODE_PROT
-	bool "Support kernel Module"
-	depends on MODULES
-	default n
-	help
-	  When enabled, this feature will mark all Executable sections in an
-	  LKM as RO
-
-config DEBUG_RODATA
-	bool "Make kernel text and rodata read-only"
-	depends on MMU && !XIP_KERNEL
-	depends on !UH_RKP
-	default y if CPU_V7
-	help
-	  If this is set, kernel text and rodata memory will be made
-	  read-only, and non-text kernel memory will be made non-executable.
-	  The tradeoff is that each region is padded to section-size (1MiB)
-	  boundaries (because their permissions are different and splitting
-	  the 1M pages into 4K ones causes TLB performance problems), which
-	  can waste memory.
-
-config UH
-	bool "Enable UH (micro hypervisor) feature"
-	default n
-
-config UH_RKP
-	bool "Enable RKP (Realtime Kernel Protection) UH feature"
-	select UH
-	default n
-
-config RKP_KDP
-	bool "Protection for cred structure"
-	depends on !SEC_VTS_TEST
-	depends on UH_RKP
-	default n
-	help
-	  Prevents unauthorized cred modification.
-
-config RKP_NS_PROT
-	bool "Protection for namespace structure"
-	depends on RKP_KDP
-	default n
-	help
-	  Prevents unauthorized namespace modification.
-
-config RKP_DMAP_PROT
-	bool "Page Double Mapping protection"
-	depends on RKP_KDP
-	default n
-	help
-	  Prevents unauthorized mapping for page table.
-
-config RKP_TEST
-	bool "Enable rkp test"
-	depends on UH_RKP && !SAMSUNG_PRODUCT_SHIP
-	default n
-	help
-	  it enables rkp test.
-
-config KDP_TEST
-	bool "Enable kdp test"
-	depends on RKP_KDP && RKP_TEST && !SAMSUNG_PRODUCT_SHIP
-	default n
-	help
-	  it enables kdp test.
 
 config BUILD_ARM64_APPENDED_DTB_IMAGE
 	bool "Build a concatenated Image.gz/dtb by default"

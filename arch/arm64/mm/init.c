@@ -466,9 +466,7 @@ void __init mem_init(void)
 void free_initmem(void)
 {
 	free_initmem_default(0);
-#ifdef CONFIG_DEBUG_RODATA
 	fixup_init();
-#endif
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD

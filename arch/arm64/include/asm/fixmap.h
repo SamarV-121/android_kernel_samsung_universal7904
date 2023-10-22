@@ -44,10 +44,6 @@ enum fixed_addresses {
 	 *
 	 * Keep this at the top so it remains 2 MB aligned.
 	 */
-#ifdef CONFIG_UH
-	FIX_UH_END,
-	FIX_UH = FIX_UH_END + SZ_2M / PAGE_SIZE - 1,
-#endif
 #define FIX_FDT_SIZE		(MAX_FDT_SIZE + SZ_2M)
 	FIX_FDT_END,
 	FIX_FDT = FIX_FDT_END + FIX_FDT_SIZE / PAGE_SIZE - 1,

@@ -47,10 +47,6 @@
 #include <asm/cacheflush.h>
 #include "audit.h"	/* audit_signal_info() */
 
-#ifdef CONFIG_SAMSUNG_FREECESS
-#include <linux/freecess.h>
-#endif
-
 /*
  * SLAB caches for signal bits.
  */
@@ -1035,13 +1031,6 @@ static int __send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	int override_rlimit;
 	int ret = 0, result;
 
-	/* debugging PF_UR case */
-	if (sig == SIGSEGV && ((info == SEND_SIG_NOINFO)||(info == SEND_SIG_PRIV)||(info == SEND_SIG_FORCED))) {
-		pr_info("Trying to send signal(11) to %s(%d).\n", 
-				t->comm,t->pid);
-		dump_stack();
-	}
-
 	assert_spin_locked(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
@@ -1201,28 +1190,6 @@ int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
 {
 	unsigned long flags;
 	int ret = -ESRCH;
-#ifdef CONFIG_OLAF_SUPPORT
-	struct task_struct *t;
-	if ((sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT)) {
-		for_each_thread(p, t) {
-			if (!strncmp(t->comm, "Jit ", strlen("Jit "))) {
-				if (t->flags & PF_FROZEN) {
-					t->flags |= PF_NOFREEZE;
-					__thaw_task(t);
-				}
-			}
-		}
-	}
-#endif
-
-#ifdef CONFIG_SAMSUNG_FREECESS
-	/*
-	 * System will send SIGIO to the app that locked the file when other apps access the file.
-	 * Report SIGIO to prevent other apps from getting stuck
-	 */
-	if ((sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT || sig == SIGIO))
-		sig_report(p);
-#endif
 
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal(sig, info, p, group);

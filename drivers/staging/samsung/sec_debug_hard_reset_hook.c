@@ -45,9 +45,6 @@ static struct workqueue_struct *blkdev_flush_wq;
 static struct delayed_work blkdev_flush_work;
 int hard_reset_key_pressed = 0;
 
-struct super_block *keypress_callback_sb = NULL;
-int (*keypress_callback_fn)(struct super_block *sb) = NULL;
-
 static bool is_hard_reset_key(unsigned int code)
 {
 	int i;
@@ -127,12 +124,6 @@ static bool is_gpio_keys_all_pressed(void)
 		}
 	}
 	return true;
-}
-
-static void blkdev_flush_work_fn(struct work_struct *work) {
-	int ret = 0;
-	if (keypress_callback_fn && keypress_callback_sb)
-		ret = keypress_callback_fn(keypress_callback_sb);
 }
 
 static enum hrtimer_restart hard_reset_hook_callback(struct hrtimer *hrtimer)
@@ -245,12 +236,6 @@ int __init hard_reset_hook_init(void)
 		all_pressed |= 0x1 << i;
 	load_gpio_key_info();
 	register_gpio_keys_notifier(&nb_gpio_keys);
-
-	INIT_DELAYED_WORK(&blkdev_flush_work, blkdev_flush_work_fn);
-	blkdev_flush_wq = create_singlethread_workqueue("blkdev_flush_wq");
-	if (!blkdev_flush_wq) {
-		pr_err("fail to create blkdev_flush_wq!\n");
-	}
 
 	return 0;
 }

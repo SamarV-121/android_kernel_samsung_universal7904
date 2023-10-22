@@ -47,11 +47,6 @@
 #include <linux/sec_debug.h>
 #endif
 
-#ifdef CONFIG_SEC_MMIOTRACE
-#include <linux/sec_mmiotrace.h>
-#endif
-
-static int safe_fault_in_progress = 0;
 static const char *fault_name(unsigned int esr);
 
 #ifdef CONFIG_SEC_DEBUG_AVOID_UNNECESSARY_TRAP
@@ -148,18 +143,6 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 	return 1;
 }
 #endif
-static int __do_kernel_fault_safe(struct mm_struct *mm, unsigned long addr,
-		unsigned int esr, struct pt_regs *regs)
-{
-	safe_fault_in_progress = 0xFAFADEAD;
-
-	exynos_ss_panic_handler_safe();
-	exynos_ss_printkl(safe_fault_in_progress,safe_fault_in_progress);
-	while(1)
-		wfi();
-
-	return 0;
-}
 
 static bool is_el1_instruction_abort(unsigned int esr)
 {
@@ -178,10 +161,6 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 	 */
 	if (!is_el1_instruction_abort(esr) && fixup_exception(regs))
 		return;
-	if (safe_fault_in_progress) {
-		exynos_ss_printkl(safe_fault_in_progress, safe_fault_in_progress);
-		return;
-	}
 
 	/*
 	 * No handler, we'll have to terminate things with extreme prejudice.
@@ -315,11 +294,6 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 
 	tsk = current;
 	mm  = tsk->mm;
-
-#ifdef CONFIG_SEC_MMIOTRACE
-	if (mmiotrace_do_fault_handler(addr, esr, regs))
-		return 0;
-#endif
 
 	/* Enable interrupts if they were enabled in the parent context. */
 	if (interrupts_enabled(regs))
@@ -489,10 +463,6 @@ static int __kprobes do_translation_fault(unsigned long addr,
 					  unsigned int esr,
 					  struct pt_regs *regs)
 {
-	/* We may have invalid '*current' due to a stack overflow. */
-	if (!virt_addr_valid(current_thread_info()) || !virt_addr_valid(current))
-		__do_kernel_fault_safe(NULL, addr, esr, regs);
-
 	if (addr < TASK_SIZE)
 		return do_page_fault(addr, esr, regs);
 
@@ -598,9 +568,8 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 	if (!inf->fn(addr, esr, regs))
 		return;
 
-	if ((unhandled_signal(current, inf->sig) && show_unhandled_signals_ratelimited()) || !user_mode(regs))
-		pr_auto(ASL1, "Unhandled fault: %s (0x%08x) at 0x%016lx\n",
-			inf->name, esr, addr);
+	pr_auto(ASL1, "Unhandled fault: %s (0x%08x) at 0x%016lx\n",
+		inf->name, esr, addr);
 
 #ifdef CONFIG_SEC_DEBUG_AVOID_UNNECESSARY_TRAP
 	if (!user_mode(regs)) {
@@ -622,7 +591,7 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 	info.si_errno = 0;
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
-	arm64_notify_die("Oops - Data abort", regs, &info, esr);
+	arm64_notify_die("", regs, &info, esr);
 }
 
 asmlinkage void __exception do_el0_irq_bp_hardening(void)
@@ -666,9 +635,9 @@ asmlinkage void __exception do_sp_pc_abort(unsigned long addr,
 
 	if (show_unhandled_signals && unhandled_signal(tsk, SIGBUS))
 		pr_info_ratelimited("%s[%d]: %s exception: pc=%p sp=%p\n",
-					    tsk->comm, task_pid_nr(tsk),
-					    esr_get_class_string(esr), (void *)regs->pc,
-					    (void *)regs->sp);
+				    tsk->comm, task_pid_nr(tsk),
+				    esr_get_class_string(esr), (void *)regs->pc,
+				    (void *)regs->sp);
 
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 	if (!user_mode(regs)) {
@@ -728,16 +697,14 @@ asmlinkage int __exception do_debug_exception(unsigned long addr,
 	if (!inf->fn(addr, esr, regs))
 		return 1;
 
-	if (unhandled_signal(current, inf->sig)
-	    && show_unhandled_signals_ratelimited())
-		pr_alert("Unhandled debug exception: %s (0x%08x) at 0x%016lx\n",
-			 inf->name, esr, addr);
+	pr_alert("Unhandled debug exception: %s (0x%08x) at 0x%016lx\n",
+		 inf->name, esr, addr);
 
 	info.si_signo = inf->sig;
 	info.si_errno = 0;
 	info.si_code  = inf->code;
 	info.si_addr  = (void __user *)addr;
-	arm64_notify_die("Oops - Debug exception", regs, &info, 0);
+	arm64_notify_die("", regs, &info, 0);
 
 	return 0;
 }

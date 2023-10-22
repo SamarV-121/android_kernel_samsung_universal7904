@@ -133,21 +133,12 @@ struct bio {
 #define BIO_CHAIN	7	/* chained bio, ->bi_remaining in effect */
 #define BIO_REFFED	8	/* bio has elevated ->bi_cnt */
 
-#ifdef CONFIG_JOURNAL_DATA_TAG
-/* XXX Be carefull not to touch BIO_RESET_BITS */
-#define BIO_JOURNAL    11      /* bio contains journal data */
-#define BIO_JMETA      12      /* bio contains metadata */
-#define BIO_JOURNAL_TAG_MASK   ((1UL << BIO_JOURNAL) | (1UL << BIO_JMETA))
-#endif
-
-#define BIO_BYPASS	13
-
 /*
  * Flags starting here get preserved by bio_reset() - this includes
  * BIO_POOL_IDX()
  */
-#define BIO_RESET_BITS	14  /* should be larger then BIO_BYPASS */
-#define BIO_OWNS_VEC	14	/* bio_free() should free bvec */
+#define BIO_RESET_BITS	13
+#define BIO_OWNS_VEC	13	/* bio_free() should free bvec */
 
 /*
  * top 4 bits of bio flags indicate the pool this bio came from
@@ -182,7 +173,6 @@ enum rq_flag_bits {
 	__REQ_INTEGRITY,	/* I/O includes block integrity payload */
 	__REQ_FUA,		/* forced unit access */
 	__REQ_FLUSH,		/* request for cache flush */
-	__REQ_BARRIER,		/* marks flush req as barrier */
 
 	/* bio only flags */
 	__REQ_RAHEAD,		/* read ahead, can fail anytime */
@@ -231,7 +221,7 @@ enum rq_flag_bits {
 #define REQ_COMMON_MASK \
 	(REQ_WRITE | REQ_FAILFAST_MASK | REQ_SYNC | REQ_META | REQ_PRIO | \
 	 REQ_DISCARD | REQ_WRITE_SAME | REQ_NOIDLE | REQ_FLUSH | REQ_FUA | \
-	 REQ_SECURE | REQ_INTEGRITY | REQ_BARRIER)
+	 REQ_SECURE | REQ_INTEGRITY)
 #define REQ_CLONE_MASK		REQ_COMMON_MASK
 
 #define BIO_NO_ADVANCE_ITER_MASK	(REQ_DISCARD|REQ_WRITE_SAME)
@@ -246,7 +236,6 @@ enum rq_flag_bits {
 #define REQ_SORTED		(1ULL << __REQ_SORTED)
 #define REQ_SOFTBARRIER		(1ULL << __REQ_SOFTBARRIER)
 #define REQ_FUA			(1ULL << __REQ_FUA)
-#define REQ_BARRIER		(1ULL << __REQ_BARRIER)
 #define REQ_NOMERGE		(1ULL << __REQ_NOMERGE)
 #define REQ_STARTED		(1ULL << __REQ_STARTED)
 #define REQ_DONTPREP		(1ULL << __REQ_DONTPREP)

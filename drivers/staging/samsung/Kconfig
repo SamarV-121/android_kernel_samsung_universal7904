@@ -63,11 +63,6 @@ config SEC_UPLOAD
 	help
 	  Samsung TN upload mode
 
-config SEC_FD_DETECT
-	bool "Detect a file descriptor invalid closer"
-	depends on SEC_DEBUG
-	default y
-
 config SEC_DEBUG_LAST_KMSG
 	bool "Write last_kmsg at /proc/last_kmsg"
 	depends on SEC_DEBUG
@@ -134,11 +129,6 @@ config SEC_BOOTSTAT
 	depends on SEC_EXT
 	default y
 
-config SEC_INITCALL_DEBUG
-	bool "Enable TN Initcall logging"
-	depends on SEC_EXT && !SAMSUNG_PRODUCT_SHIP
-	default y
-	
 config SEC_RESUME_SUSPEND_DEBUG
 	bool "Enable TN resume and suspend logging"
 	depends on SEC_EXT && !SAMSUNG_PRODUCT_SHIP
@@ -149,19 +139,6 @@ config ARGOS
 	default n
 	help
 	  Check throughput and set appropriate system parameters(CPU freq, affinity, etc)
-
-config SEC_KWATCHER
-	bool "Enable kwatchder support" if EMBEDDED
-	depends on PERF_EVENTS
-	default n
-	help
-	  This option supports for ARM self hosted debugger.
-
-config SEC_MMIOTRACE
-	bool "MMIO Trace"
-	default n
-	help
-	  This option supports for ARM self hosted debugger
 
 comment "Samsung TN Build Options"
 config SEC_FACTORY
@@ -178,27 +155,12 @@ config SEC_FACTORY
  	default n
 
 comment "Samsung TN Logging Options"
-config SEC_AVC_LOG
-	default n
-	bool "Enable avc audit log support" if EMBEDDED
-	depends on SEC_EXT
-	help
-	  This option enables additional log buffer for audit log.
-
 config SEC_DEBUG_TSP_LOG
 	default n
 	bool "Enable tsp log support" if EMBEDDED
 	depends on SEC_EXT
 	help
 	  This option enables additional log buffer for tsp log.
-
-config SEC_DEBUG_INIT_EXIT_PANIC
-	bool "Trigger panic when exiting init task group"
-	depends on SEC_DEBUG
-	default y
-	help
-	  This option enables early panic when it attempt to kill init tasks.
-	  It may happen before init task stack is destroyed for debugging.
 
 config SEC_DEBUG_SOFTDOG_PWDT
 	bool "Enable Soft Watchdog for Platform"

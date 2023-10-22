@@ -1692,11 +1692,6 @@ void init_request_from_bio(struct request *req, struct bio *bio)
 	if (bio->bi_rw & REQ_RAHEAD)
 		req->cmd_flags |= REQ_FAILFAST_MASK;
 
-#ifdef CONFIG_JOURNAL_DATA_TAG
-	if (bio_flagged(bio, BIO_JMETA) || bio_flagged(bio, BIO_JOURNAL))
-		req->cmd_flags |= REQ_META;
-#endif
-
 	req->errors = 0;
 	req->__sector = bio->bi_iter.bi_sector;
 	req->ioprio = bio_prio(bio);
@@ -2299,8 +2294,6 @@ void blk_account_io_completion(struct request *req, unsigned int bytes)
 		cpu = part_stat_lock();
 		part = req->part;
 		part_stat_add(cpu, part, sectors[rw], bytes >> 9);
-		if (req->cmd_flags & REQ_DISCARD)
-			part_stat_add(cpu, part, discard_sectors, bytes >> 9);
 		part_stat_unlock();
 	}
 }
@@ -2325,17 +2318,10 @@ void blk_account_io_done(struct request *req)
 		part_stat_add(cpu, part, ticks[rw], duration);
 		part_round_stats(cpu, part);
 		part_dec_in_flight(part, rw);
-		if (req->cmd_flags & REQ_DISCARD)
-			part_stat_inc(cpu, part, discard_ios);
-		if (!(req->cmd_flags & REQ_STARTED))
-			part_stat_inc(cpu, part, flush_ios);
 
 		hd_struct_put(part);
 		part_stat_unlock();
 	}
-
-	if (req->cmd_flags & REQ_FLUSH_SEQ)
-		req->q->flush_ios++;
 }
 
 #ifdef CONFIG_PM
@@ -2516,8 +2502,6 @@ void blk_dequeue_request(struct request *rq)
 	 * the driver side.
 	 */
 	if (blk_account_rq(rq)) {
-		if (!queue_in_flight(q))
-			q->in_flight_stamp = ktime_get();
 		q->in_flight[rq_is_sync(rq)]++;
 		set_io_start_time_ns(rq);
 	}
@@ -3559,73 +3543,6 @@ void blk_post_runtime_resume(struct request_queue *q, int err)
 EXPORT_SYMBOL(blk_post_runtime_resume);
 #endif
 
-/* IOPP-sio-v1.0.4.4 */
-#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-/*********************************
- * debugfs functions
- **********************************/
-#ifdef CONFIG_DEBUG_FS
-#include <linux/debugfs.h>
-
-#define DBGFS_FUNC_DECL(name) \
-static int sio_open_##name(struct inode *inode, struct file *file) \
-{ \
-	return single_open(file, sio_show_##name, inode->i_private); \
-} \
-static const struct file_operations sio_fops_##name = { \
-	.owner		= THIS_MODULE, \
-	.open		= sio_open_##name, \
-	.llseek		= seq_lseek, \
-	.read		= seq_read, \
-	.release	= single_release, \
-}
-
-static int sio_show_patches(struct seq_file *s, void *p)
-{
-	extern char *__start_sio_patches;
-	extern char *__stop_sio_patches;
-	char **p_version_str;
-
-	for (p_version_str = &__start_sio_patches; p_version_str < &__stop_sio_patches; ++p_version_str)
-		seq_printf(s, "%s\n", *p_version_str);
-
-	return 0;
-}
-
-static struct dentry *sio_debugfs_root;
-
-DBGFS_FUNC_DECL(patches);
-
-SIO_PATCH_VERSION(SIO_patch_manager, 1, 0, "");
-
-static int __init sio_debugfs_init(void)
-{
-	if (!debugfs_initialized())
-		return -ENODEV;
-
-	sio_debugfs_root = debugfs_create_dir("sio", NULL);
-	if (!sio_debugfs_root)
-		return -ENOMEM;
-
-	debugfs_create_file("patches", 0400, sio_debugfs_root, NULL, &sio_fops_patches);
-
-	return 0;
-}
-
-static void __exit sio_debugfs_exit(void)
-{
-	debugfs_remove_recursive(sio_debugfs_root);
-}
-#else
-static int __init sio_debugfs_init(void)
-{
-	return 0;
-}
-
-static void __exit sio_debugfs_exit(void) { }
-#endif
-#endif
-
 int __init blk_dev_init(void)
 {
 	BUILD_BUG_ON(__REQ_NR_BITS > 8 *
@@ -3642,10 +3559,6 @@ int __init blk_dev_init(void)
 
 	blk_requestq_cachep = kmem_cache_create("blkdev_queue",
 			sizeof(struct request_queue), 0, SLAB_PANIC, NULL);
-
-#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	sio_debugfs_init();
-#endif
 
 	return 0;
 }

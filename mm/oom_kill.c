@@ -339,11 +339,6 @@ static struct task_struct *select_bad_process(struct oom_control *oc,
 	return chosen;
 }
 
-#if defined(CONFIG_ZSWAP)
-extern u64 zswap_pool_pages;
-extern atomic_t zswap_stored_pages;
-#endif
-
 /**
  * dump_tasks - dump current memory state of all system tasks
  * @memcg: current's memory controller, if constrained
@@ -355,23 +350,12 @@ extern atomic_t zswap_stored_pages;
  * State information includes task's pid, uid, tgid, vm size, rss, nr_ptes,
  * swapents, oom_score_adj value, and name.
  */
-void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
+static void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 {
 	struct task_struct *p;
 	struct task_struct *task;
-#if defined(CONFIG_ZSWAP)
-	int zswap_stored_pages_temp;
-	unsigned long zswap_pool_pages_temp;
-	unsigned long tasksize_swap;
-#endif
 
-#if defined(CONFIG_ZSWAP)
-	zswap_stored_pages_temp = atomic_read(&zswap_stored_pages);
-	zswap_pool_pages_temp = zswap_pool_pages;
-	pr_info("[ pid ]   uid  tgid total_vm total_rss (   rss     swap  ) nr_ptes nr_pmds swapents oom_score_adj name\n");
-#else
 	pr_info("[ pid ]   uid  tgid total_vm      rss nr_ptes nr_pmds swapents oom_score_adj name\n");
-#endif
 	rcu_read_lock();
 	for_each_process(p) {
 		if (oom_unkillable_task(p, memcg, nodemask))
@@ -387,26 +371,9 @@ void dump_tasks(struct mem_cgroup *memcg, const nodemask_t *nodemask)
 			continue;
 		}
 
-#if defined(CONFIG_ZSWAP)
-		if (zswap_stored_pages_temp)
-			tasksize_swap = zswap_pool_pages_temp
-					* get_mm_counter(task->mm, MM_SWAPENTS)
-					/ zswap_stored_pages_temp;
-		else
-			tasksize_swap = 0;
-		pr_info("[%5d] %5d %5d %8lu  %8lu (%8lu %8lu) %7ld %7ld %8lu         %5hd %s\n",
-#else
 		pr_info("[%5d] %5d %5d %8lu %8lu %7ld %7ld %8lu         %5hd %s\n",
-#endif
-
 			task->pid, from_kuid(&init_user_ns, task_uid(task)),
-			task->tgid, task->mm->total_vm,
-#if defined(CONFIG_ZSWAP)
-			get_mm_rss(task->mm) + tasksize_swap,
-			get_mm_rss(task->mm), tasksize_swap,
-#else
-			get_mm_rss(task->mm),
-#endif
+			task->tgid, task->mm->total_vm, get_mm_rss(task->mm),
 			atomic_long_read(&task->mm->nr_ptes),
 			mm_nr_pmds(task->mm),
 			get_mm_counter(task->mm, MM_SWAPENTS),
