@@ -164,16 +164,12 @@ DEFINE_SIMPLE_ATTRIBUTE(cma_alloc_fops, NULL, cma_alloc_write, "%llu\n");
 static void cma_debugfs_add_one(struct cma *cma, int idx)
 {
 	struct dentry *tmp;
+	char name[16];
 	int u32s;
 
-	if (cma->name) {
-		tmp = debugfs_create_dir(cma->name, cma_debugfs_root);
-	} else {
-		char name[16];
+	sprintf(name, "cma-%d", idx);
 
-		sprintf(name, "cma-%d", idx);
-		tmp = debugfs_create_dir(name, cma_debugfs_root);
-	}
+	tmp = debugfs_create_dir(name, cma_debugfs_root);
 
 	debugfs_create_file("alloc", S_IWUSR, tmp, cma,
 				&cma_alloc_fops);
