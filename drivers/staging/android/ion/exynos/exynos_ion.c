@@ -475,9 +475,9 @@ static int __init exynos_ion_reserved_mem_setup(struct reserved_mem *rmem)
 
 		/* set as non-coherent device */
 		arch_setup_dma_ops(&pdata->dev, 0, 0, NULL, 0);
-		ret = cma_init_reserved_mem_with_name(
-				heap_data->base, heap_data->size, 0, &cma,
-				heap_data->name);
+		ret = cma_init_reserved_mem(heap_data->base,
+					    heap_data->size, 0,
+					    heap_data->name, &cma);
 		if (ret) {
 			pr_err("%s: failed to declare cma region %s (%d)\n",
 			       __func__, heap_data->name, ret);
