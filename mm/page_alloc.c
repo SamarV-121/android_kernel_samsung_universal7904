@@ -1996,9 +1996,8 @@ static void drain_pages(unsigned int cpu)
  * The CPU has to be pinned. When zone parameter is non-NULL, spill just
  * the single zone's pages.
  */
-void drain_local_pages(void *z)
+void drain_local_pages(struct zone *zone)
 {
-	struct zone *zone = (struct zone *)z;
 	int cpu = smp_processor_id();
 
 	if (zone)
@@ -2058,7 +2057,8 @@ void drain_all_pages(struct zone *zone)
 		else
 			cpumask_clear_cpu(cpu, &cpus_with_pcps);
 	}
-	on_each_cpu_mask(&cpus_with_pcps, drain_local_pages, zone, 1);
+	on_each_cpu_mask(&cpus_with_pcps, (smp_call_func_t) drain_local_pages,
+								zone, 1);
 }
 
 #ifdef CONFIG_HIBERNATION
