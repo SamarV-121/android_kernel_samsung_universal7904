@@ -870,7 +870,7 @@
 				pinctrl-0 = <&hall_irq>;
 				hall {
 					name = "hall";
-					event = <0x15>;
+					event = <0x00>;
 					gpios = <&gpa0 2 0>;
 				};
 			};
