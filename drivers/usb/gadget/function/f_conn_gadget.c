@@ -1269,13 +1269,13 @@ static int conn_gadget_setup(struct conn_gadget_instance *fi_conn_gadget)
 		printk(KERN_ERR "%s: misc_register f %d\n", __func__, ret);
 		goto err_;
 	}
-	
+
 	android_dev = create_function_device("f_conn_gadget");
 	if (IS_ERR(android_dev))
 		return PTR_ERR(android_dev);
 
 	attrs = conn_gadget_function_attributes;
-	
+
 	if (attrs) {
 		while ((attr = *attrs++) && !err)
 			err = device_create_file(android_dev, attr);
@@ -1288,8 +1288,8 @@ static int conn_gadget_setup(struct conn_gadget_instance *fi_conn_gadget)
 	return 0;
 err_:
 
-    if (dev->rd_queue_buf)
-	vfree(dev->rd_queue_buf);
+	if (dev->rd_queue_buf)
+		vfree(dev->rd_queue_buf);
 
 	_conn_gadget_dev = NULL;
 	kfree(dev);

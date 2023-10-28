@@ -1081,7 +1081,7 @@ static struct attribute_group fimc_is_debug_attr_group = {
 	.attrs	= fimc_is_debug_entries,
 };
 
-static int fimc_is_probe(struct platform_device *pdev)
+static int __init fimc_is_probe(struct platform_device *pdev)
 {
 	struct exynos_platform_fimc_is *pdata;
 #if defined (ENABLE_IS_CORE) || defined (USE_MCUCTL)
@@ -1582,7 +1582,7 @@ static const struct of_device_id exynos_fimc_is_match[] = {
 };
 MODULE_DEVICE_TABLE(of, exynos_fimc_is_match);
 
-static struct platform_driver fimc_is_driver = {
+static struct platform_driver fimc_is_driver __refdata = {
 	.probe		= fimc_is_probe,
 	.remove		= fimc_is_remove,
 	.shutdown	= fimc_is_shutdown,
@@ -1595,7 +1595,7 @@ static struct platform_driver fimc_is_driver = {
 };
 
 #else
-static struct platform_driver fimc_is_driver = {
+static struct platform_driver fimc_is_driver __refdata = {
 	.probe		= fimc_is_probe,
 	.remove 	= __devexit_p(fimc_is_remove),
 	.driver = {

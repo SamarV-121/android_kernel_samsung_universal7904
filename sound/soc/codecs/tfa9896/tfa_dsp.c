@@ -83,7 +83,7 @@ TFA_INTERNAL struct tfa98xx_handle_private handles_local[MAX_HANDLES];
 /* calibration done executed */
 #define TFA_MTPEX_POS           TFA98XX_KEY2_PROTECTED_MTP0_MTPEX_POS /**/
 
-static enum tfa_error _tfa_stop(tfa98xx_handle_t handle);
+static enum tfa98xx_error _tfa_stop(tfa98xx_handle_t handle);
 static void tfa_status_read(tfa98xx_handle_t handle);
 
 /*
@@ -4738,7 +4738,7 @@ tfa_run_wait_calibration(tfa98xx_handle_t handle, int *calibrate_done)
 	return err;
 }
 
-enum tfa_error tfa_start(int next_profile, int *vstep)
+enum tfa98xx_error tfa_start(int next_profile, int *vstep)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
 	int dev, devcount = tfa98xx_cnt_max_device();
@@ -4762,7 +4762,7 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 
 	if (devcount < 1) {
 		pr_err("No or wrong container file loaded\n");
-		return tfa_error_bad_param;
+		return TFA98XX_ERROR_BAD_PARAMETER;
 	}
 
 #if defined(TFA_USE_DEVICE_SPECIFIC_CONTROL)
@@ -5016,14 +5016,14 @@ error_exit:
 	return err;
 }
 
-enum tfa_error tfa_stop(void)
+enum tfa98xx_error tfa_stop(void)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
 	int dev, devcount = tfa98xx_cnt_max_device();
 
 	if (devcount == 0) {
 		pr_err("No or wrong container file loaded\n");
-		return	tfa_error_bad_param;
+		return	TFA98XX_ERROR_BAD_PARAMETER;
 	}
 
 	for (dev = 0; dev < devcount; dev++) {
@@ -5058,7 +5058,7 @@ error_exit:
 	return err;
 }
 
-static enum tfa_error _tfa_stop(tfa98xx_handle_t handle)
+static enum tfa98xx_error _tfa_stop(tfa98xx_handle_t handle)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
 
@@ -5136,7 +5136,7 @@ int tfa98xx_reset(tfa98xx_handle_t handle)
 	return err;
 }
 
-enum tfa_error tfa_reset(void)
+enum tfa98xx_error tfa_reset(void)
 {
 	enum tfa98xx_error err = TFA98XX_ERROR_OK;
 	int handle_in_use = 0;
@@ -5613,7 +5613,7 @@ tfa_dsp_handle_event(tfa98xx_handle_t handle,
 	enum tfadsp_event_en tfadsp_event)
 {
 	int retval = handles_local[handle].rev; /* return revid by default */
-	enum tfa_error err;
+	enum tfa98xx_error err;
 
 	switch (tfadsp_event) {
 	case TFADSP_EXT_PWRUP: /*DSP starting*/

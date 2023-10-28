@@ -723,15 +723,6 @@ p_err:
 	return ret;
 }
 
-static int sensor_module_5e9_remove(struct platform_device *pdev)
-{
-	int ret = 0;
-
-	info("%s\n", __func__);
-
-	return ret;
-}
-
 static const struct of_device_id exynos_fimc_is_sensor_module_5e9_match[] = {
 	{
 		.compatible = "samsung,sensor-module-5e9",
@@ -741,8 +732,6 @@ static const struct of_device_id exynos_fimc_is_sensor_module_5e9_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_fimc_is_sensor_module_5e9_match);
 
 static struct platform_driver sensor_module_5e9_driver = {
-	.probe  = sensor_module_5e9_probe,
-	.remove = sensor_module_5e9_remove,
 	.driver = {
 		.name   = "FIMC-IS-SENSOR-MODULE-5E9",
 		.owner  = THIS_MODULE,
@@ -750,4 +739,16 @@ static struct platform_driver sensor_module_5e9_driver = {
 	}
 };
 
-module_platform_driver(sensor_module_5e9_driver);
+static int __init fimc_is_sensor_module_5e9_init(void)
+{
+	int ret;
+
+	ret = platform_driver_probe(&sensor_module_5e9_driver,
+				sensor_module_5e9_probe);
+	if (ret)
+		err("failed to probe %s driver: %d\n",
+			sensor_module_5e9_driver.driver.name, ret);
+
+	return ret;
+}
+late_initcall(fimc_is_sensor_module_5e9_init);

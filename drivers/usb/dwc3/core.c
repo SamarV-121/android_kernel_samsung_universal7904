@@ -64,8 +64,9 @@ int dwc3_set_vbus_current(int state)
 		return -1;
 	}
 
-	pval.intval = state; 
-	power_supply_set_property(psy, POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, &pval);
+	pval.intval = state;
+	power_supply_set_property(psy, (enum power_supply_property)
+				  POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, &pval);
 
 	return 0;
 }

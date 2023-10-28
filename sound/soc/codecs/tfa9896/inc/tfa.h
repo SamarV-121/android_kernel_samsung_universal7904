@@ -72,7 +72,7 @@ tfa_probe(unsigned char slave_address, int *pDevice);
  *                        0 sets the maximum volume
  * @return enum tfa_error
  */
-enum tfa_error tfa_start(int profile, int *vstep);
+enum tfa98xx_error tfa_start(int profile, int *vstep);
 
 /**
  * Stop SpeakerBoost on all devices/channels.
@@ -84,7 +84,7 @@ enum tfa_error tfa_start(int profile, int *vstep);
  *
  * @return enum tfa_error
  */
-enum tfa_error tfa_stop(void);
+enum tfa98xx_error tfa_stop(void);
 
 /**
  * discard container buffer and free all resources.\n
@@ -102,7 +102,7 @@ void tfa_deinit(void);
  *  - tfa_error_device channel error
  *  - tfa_error_noclock only register level init could be preformed
  */
-enum tfa_error tfa_reset(void);
+enum tfa98xx_error tfa_reset(void);
 
 enum tfa98xx_error tfa_write_filters(int dev_idx, int prof_idx);
 

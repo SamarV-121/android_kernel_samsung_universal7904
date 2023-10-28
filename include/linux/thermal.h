@@ -100,6 +100,9 @@ struct thermal_data_devices {
 };
 #endif
 
+typedef int (*get_static_t)(cpumask_t *cpumask, int interval,
+			    unsigned long voltage, u32 *power);
+
 enum thermal_device_mode {
 	THERMAL_DEVICE_DISABLED = 0,
 	THERMAL_DEVICE_ENABLED,
