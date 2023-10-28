@@ -70,12 +70,12 @@ static ssize_t flip_cover_detect_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 #ifdef CONFIG_HALL_EVENT_REVERSE
-	if (test_bit(SW_FLIP, gddata->input->sw))
+	if (test_bit(SW_LID, gddata->input->sw))
 		sprintf(buf, "CLOSE\n");
 	else
 		sprintf(buf, "OPEN\n");
 #else
-	if (test_bit(SW_FLIP, gddata->input->sw))
+	if (test_bit(SW_LID, gddata->input->sw))
 		sprintf(buf, "OPEN\n");
 	else
 		sprintf(buf, "CLOSE\n");
