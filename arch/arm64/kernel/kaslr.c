@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 
+#include <asm/cacheflush.h>
 #include <asm/fixmap.h>
 #include <asm/kernel-pgtable.h>
 #include <asm/memory.h>
@@ -42,7 +43,7 @@ static __init u64 get_kaslr_seed(void *fdt)
 	return ret;
 }
 
-static __init const u8 *get_cmdline(void *fdt)
+static __init const u8 *kaslr_get_cmdline(void *fdt)
 {
 	static __initconst const u8 default_cmdline[] = CONFIG_CMDLINE;
 
@@ -86,6 +87,7 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	 * we end up running with module randomization disabled.
 	 */
 	module_alloc_base = (u64)_etext - MODULES_VSIZE;
+	__flush_dcache_area(&module_alloc_base, sizeof(module_alloc_base));
 
 	/*
 	 * Try to map the FDT early. If this fails, we simply bail,
@@ -108,7 +110,7 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	 * Check if 'nokaslr' appears on the command line, and
 	 * return 0 if that is the case.
 	 */
-	cmdline = get_cmdline(fdt);
+	cmdline = kaslr_get_cmdline(fdt);
 	str = strstr(cmdline, "nokaslr");
 	if (str == cmdline || (str > cmdline && *(str - 1) == ' '))
 		return 0;
@@ -130,11 +132,15 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	/*
 	 * The kernel Image should not extend across a 1GB/32MB/512MB alignment
 	 * boundary (for 4KB/16KB/64KB granule kernels, respectively). If this
-	 * happens, increase the KASLR offset by the size of the kernel image.
+	 * happens, increase the KASLR offset by the size of the kernel image
+	 * rounded up by SWAPPER_BLOCK_SIZE.
 	 */
 	if ((((u64)_text + offset + modulo_offset) >> SWAPPER_TABLE_SHIFT) !=
-	    (((u64)_end + offset + modulo_offset) >> SWAPPER_TABLE_SHIFT))
-		offset = (offset + (u64)(_end - _text)) & mask;
+	    (((u64)_end + offset + modulo_offset) >> SWAPPER_TABLE_SHIFT)) {
+		u64 kimg_sz = _end - _text;
+		offset = (offset + round_up(kimg_sz, SWAPPER_BLOCK_SIZE))
+				& mask;
+	}
 
 	if (IS_ENABLED(CONFIG_KASAN))
 		/*
@@ -172,6 +178,9 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	/* use the lower 21 bits to randomize the base of the module region */
 	module_alloc_base += (module_range * (seed & ((1 << 21) - 1))) >> 21;
 	module_alloc_base &= PAGE_MASK;
+
+	__flush_dcache_area(&module_alloc_base, sizeof(module_alloc_base));
+	__flush_dcache_area(&memstart_offset_seed, sizeof(memstart_offset_seed));
 
 	return offset;
 }

@@ -132,51 +132,6 @@ load_microcode(struct mc_saved_data *mc_saved_data, unsigned long *initrd,
 	}
 }
 
-/*
- * Given CPU signature and a microcode patch, this function finds if the
- * microcode patch has matching family and model with the CPU.
- */
-static enum ucode_state
-matching_model_microcode(struct microcode_header_intel *mc_header,
-			unsigned long sig)
-{
-	unsigned int fam, model;
-	unsigned int fam_ucode, model_ucode;
-	struct extended_sigtable *ext_header;
-	unsigned long total_size = get_totalsize(mc_header);
-	unsigned long data_size = get_datasize(mc_header);
-	int ext_sigcount, i;
-	struct extended_signature *ext_sig;
-
-	fam   = __x86_family(sig);
-	model = x86_model(sig);
-
-	fam_ucode   = __x86_family(mc_header->sig);
-	model_ucode = x86_model(mc_header->sig);
-
-	if (fam == fam_ucode && model == model_ucode)
-		return UCODE_OK;
-
-	/* Look for ext. headers: */
-	if (total_size <= data_size + MC_HEADER_SIZE)
-		return UCODE_NFOUND;
-
-	ext_header   = (void *) mc_header + data_size + MC_HEADER_SIZE;
-	ext_sig      = (void *)ext_header + EXT_HEADER_SIZE;
-	ext_sigcount = ext_header->count;
-
-	for (i = 0; i < ext_sigcount; i++) {
-		fam_ucode   = __x86_family(ext_sig->sig);
-		model_ucode = x86_model(ext_sig->sig);
-
-		if (fam == fam_ucode && model == model_ucode)
-			return UCODE_OK;
-
-		ext_sig++;
-	}
-	return UCODE_NFOUND;
-}
-
 static int
 save_microcode(struct mc_saved_data *mc_saved_data,
 	       struct microcode_intel **mc_saved_src,
@@ -321,8 +276,8 @@ get_matching_model_microcode(int cpu, unsigned long start,
 		 * the platform, we need to find and save microcode patches
 		 * with the same family and model as the BSP.
 		 */
-		if (matching_model_microcode(mc_header, uci->cpu_sig.sig) !=
-			 UCODE_OK) {
+		if (!find_matching_signature(mc_header, uci->cpu_sig.sig,
+					     uci->cpu_sig.pf)) {
 			ucode_ptr += mc_size;
 			continue;
 		}
@@ -376,15 +331,8 @@ static int collect_cpu_info_early(struct ucode_cpu_info *uci)
 		native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
 		csig.pf = 1 << ((val[1] >> 18) & 7);
 	}
-	native_wrmsr(MSR_IA32_UCODE_REV, 0, 0);
 
-	/* As documented in the SDM: Do a CPUID 1 here */
-	sync_core();
-
-	/* get the current revision from MSR 0x8B */
-	native_rdmsr(MSR_IA32_UCODE_REV, val[0], val[1]);
-
-	csig.rev = val[1];
+	csig.rev = intel_get_microcode_revision();
 
 	uci->cpu_sig = csig;
 	uci->valid = 1;
@@ -654,31 +602,37 @@ static inline void print_ucode(struct ucode_cpu_info *uci)
 static int apply_microcode_early(struct ucode_cpu_info *uci, bool early)
 {
 	struct microcode_intel *mc_intel;
-	unsigned int val[2];
+	u32 rev;
 
 	mc_intel = uci->mc;
 	if (mc_intel == NULL)
 		return 0;
 
+	/*
+	 * Save us the MSR write below - which is a particular expensive
+	 * operation - when the other hyperthread has updated the microcode
+	 * already.
+	 */
+	rev = intel_get_microcode_revision();
+	if (rev >= mc_intel->hdr.rev) {
+		uci->cpu_sig.rev = rev;
+		return 0;
+	}
+
 	/* write microcode via MSR 0x79 */
 	native_wrmsr(MSR_IA32_UCODE_WRITE,
 	      (unsigned long) mc_intel->bits,
 	      (unsigned long) mc_intel->bits >> 16 >> 16);
-	native_wrmsr(MSR_IA32_UCODE_REV, 0, 0);
 
-	/* As documented in the SDM: Do a CPUID 1 here */
-	sync_core();
-
-	/* get the current revision from MSR 0x8B */
-	native_rdmsr(MSR_IA32_UCODE_REV, val[0], val[1]);
-	if (val[1] != mc_intel->hdr.rev)
+	rev = intel_get_microcode_revision();
+	if (rev != mc_intel->hdr.rev)
 		return -1;
 
 #ifdef CONFIG_X86_64
 	/* Flush global tlb. This is precaution. */
 	flush_tlb_early();
 #endif
-	uci->cpu_sig.rev = val[1];
+	uci->cpu_sig.rev = rev;
 
 	if (early)
 		print_ucode(uci);
@@ -852,7 +806,7 @@ static int apply_microcode_intel(int cpu)
 {
 	struct microcode_intel *mc_intel;
 	struct ucode_cpu_info *uci;
-	unsigned int val[2];
+	u32 rev;
 	int cpu_num = raw_smp_processor_id();
 	struct cpuinfo_x86 *c = &cpu_data(cpu_num);
 
@@ -873,31 +827,40 @@ static int apply_microcode_intel(int cpu)
 	if (get_matching_mc(mc_intel, cpu) == 0)
 		return 0;
 
+	/*
+	 * Save us the MSR write below - which is a particular expensive
+	 * operation - when the other hyperthread has updated the microcode
+	 * already.
+	 */
+	rev = intel_get_microcode_revision();
+	if (rev >= mc_intel->hdr.rev)
+		goto out;
+
 	/* write microcode via MSR 0x79 */
 	wrmsr(MSR_IA32_UCODE_WRITE,
 	      (unsigned long) mc_intel->bits,
 	      (unsigned long) mc_intel->bits >> 16 >> 16);
-	wrmsr(MSR_IA32_UCODE_REV, 0, 0);
 
-	/* As documented in the SDM: Do a CPUID 1 here */
-	sync_core();
+	rev = intel_get_microcode_revision();
 
-	/* get the current revision from MSR 0x8B */
-	rdmsr(MSR_IA32_UCODE_REV, val[0], val[1]);
-
-	if (val[1] != mc_intel->hdr.rev) {
+	if (rev != mc_intel->hdr.rev) {
 		pr_err("CPU%d update to revision 0x%x failed\n",
 		       cpu_num, mc_intel->hdr.rev);
 		return -1;
 	}
 	pr_info("CPU%d updated to revision 0x%x, date = %04x-%02x-%02x\n",
-		cpu_num, val[1],
+		cpu_num, rev,
 		mc_intel->hdr.date & 0xffff,
 		mc_intel->hdr.date >> 24,
 		(mc_intel->hdr.date >> 16) & 0xff);
 
-	uci->cpu_sig.rev = val[1];
-	c->microcode = val[1];
+out:
+	uci->cpu_sig.rev = rev;
+	c->microcode	 = rev;
+
+	/* Update boot_cpu_data's revision too, if we're on the BSP: */
+	if (c->cpu_index == boot_cpu_data.cpu_index)
+		boot_cpu_data.microcode = rev;
 
 	return 0;
 }
@@ -1005,7 +968,7 @@ static bool is_blacklisted(unsigned int cpu)
 	 */
 	if (c->x86 == 6 &&
 	    c->x86_model == 79 &&
-	    c->x86_mask == 0x01 &&
+	    c->x86_stepping == 0x01 &&
 	    llc_size_per_core > 2621440 &&
 	    c->microcode < 0x0b000021) {
 		pr_err_once("Erratum BDF90: late loading with revision < 0x0b000021 (0x%x) disabled.\n", c->microcode);
@@ -1028,7 +991,7 @@ static enum ucode_state request_microcode_fw(int cpu, struct device *device,
 		return UCODE_NFOUND;
 
 	sprintf(name, "intel-ucode/%02x-%02x-%02x",
-		c->x86, c->x86_model, c->x86_mask);
+		c->x86, c->x86_model, c->x86_stepping);
 
 	if (request_firmware_direct(&firmware, name, device)) {
 		pr_debug("data file %s load failed\n", name);

@@ -688,6 +688,12 @@ static void disable_single_step(struct perf_event *bp)
 	arch_install_hw_breakpoint(bp);
 }
 
+static int watchpoint_fault_on_uaccess(struct pt_regs *regs,
+				       struct arch_hw_breakpoint *info)
+{
+	return !user_mode(regs) && info->ctrl.privilege == ARM_BREAKPOINT_USER;
+}
+
 static void watchpoint_handler(unsigned long addr, unsigned int fsr,
 			       struct pt_regs *regs)
 {
@@ -754,17 +760,20 @@ static void watchpoint_handler(unsigned long addr, unsigned int fsr,
 		 * can't help us with this.
 		 */
 		if (watchpoint_fault_on_uaccess(regs, info))
-			enable_single_step(wp, instruction_pointer(regs));
+			goto step;
 
 		perf_bp_event(wp, regs);
 
 		/*
-		 * If no overflow handler is present, insert a temporary
-		 * mismatch breakpoint so we can single-step over the
-		 * watchpoint trigger.
+		 * Defer stepping to the overflow handler if one is installed.
+		 * Otherwise, insert a temporary mismatch breakpoint so that
+		 * we can single-step over the watchpoint trigger.
 		 */
 		if (is_default_overflow_handler(wp))
-			enable_single_step(wp, instruction_pointer(regs));
+			goto unlock;
+
+step:
+		enable_single_step(wp, instruction_pointer(regs));
 unlock:
 		rcu_read_unlock();
 	}

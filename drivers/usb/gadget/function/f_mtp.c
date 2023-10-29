@@ -564,6 +564,11 @@ static ssize_t mtp_read(struct file *fp, char __user *buf,
 	int ret = 0;
 	size_t len = 0;
 
+	if (!cdev) {
+		pr_err("%s: check cdev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
 	DBG(cdev, "mtp_read(%zu)\n", count);
 
 	/* we will block until we're online */
@@ -574,8 +579,17 @@ static ssize_t mtp_read(struct file *fp, char __user *buf,
 		r = ret;
 		goto done;
 	}
+
+	len = ALIGN(count, dev->ep_out->maxpacket);
+
 	spin_lock_irq(&dev->lock);
+
 	if (dev->ep_out->desc) {
+		if (!cdev) {
+			spin_unlock_irq(&dev->lock);
+			return -ENODEV;
+		}
+
 		len = usb_ep_align_maybe(cdev->gadget, dev->ep_out, count);
 		if (len > MTP_BULK_BUFFER_SIZE) {
 			spin_unlock_irq(&dev->lock);
@@ -595,7 +609,7 @@ static ssize_t mtp_read(struct file *fp, char __user *buf,
 requeue_req:
 	/* queue a request */
 	req = dev->rx_req[0];
-	req->length = count;
+	req->length = len;
 	dev->rx_done = 0;
 	set_read_req_length(req);
 	ret = usb_ep_queue(dev->ep_out, req, GFP_KERNEL);
@@ -1564,7 +1578,7 @@ struct usb_function *function_alloc_mtp_ptp(struct usb_function_instance *fi,
 		pr_err("\t2: Create MTP function\n");
 		pr_err("\t3: Create and symlink PTP function"
 				" with a gadget configuration\n");
-		return NULL;
+		return ERR_PTR(-EINVAL); /* Invalid Configuration */
 	}
 
 	dev = fi_mtp->dev;
@@ -1588,7 +1602,7 @@ struct usb_function *function_alloc_mtp_ptp(struct usb_function_instance *fi,
 	function->unbind = mtp_function_unbind;
 	function->set_alt = mtp_function_set_alt;
 	function->disable = mtp_function_disable;
-	function->ctrlrequest = mtp_ctrlreq_configfs;
+	function->setup = mtp_ctrlreq_configfs;
 	function->free_func = mtp_free;
 
 	return function;
