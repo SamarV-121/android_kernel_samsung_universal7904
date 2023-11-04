@@ -786,69 +786,7 @@
 
 			cpufreq {
 				domain@1 {
-					max-freq = <1768000>;
-
-					dm-constraints {
-						mif-perf {
-							table = < 1768000 1794000
-								  1664000 1539000
-								  1560000 1539000
-								  1352000 1352000
-								  1144000 1014000
-								   936000  546000
-								   728000  420000>;
-						};
-					};
-				};
-			};
-
-			cpufreq-ufc {
-				/* Ctrl Type */
-				#define PM_QOS_MIN_LIMIT		0
-				#define PM_QOS_MIN_WO_BOOST_LIMIT	1
-				#define PM_QOS_MAX_LIMIT		2
-				/* Execution Mode */
-				#define AARCH64_MODE			0
-				#define AARCH32_MODE			1
-
-				domain@0 {
-					device_type = "cpufreq-userctrl";
-					shared-cpus = "0-5";
-
-					user-default-qos = <839000>;
-				};
-
-				domain@1 {
-					device_type = "cpufreq-userctrl";
-					shared-cpus = "6-7";
-
-					user-default-qos = <936000>;
-
-					min-limit {
-						ctrl-type = <PM_QOS_MIN_LIMIT>;
-						execution-mode = <AARCH64_MODE>;
-							/* big	    lit */
-						table = < 1768000  1586000
-							  1664000  839000
-							  1560000  839000
-							  1352000  839000
-							  1144000  839000
-							   936000  839000
-							   728000  839000 >;
-					};
-
-					max-limit {
-						ctrl-type = <PM_QOS_MAX_LIMIT>;
-						execution-mode = <AARCH64_MODE>;
-							/* big	    lit */
-						table = < 1768000 1586000
-							  1664000 1586000
-							  1560000 1586000
-							  1352000 1586000
-							  1144000 1352000
-							   936000 1248000
-							   728000 1248000 >;
-					};
+					max-freq = <2184000>;
 				};
 			};
 
