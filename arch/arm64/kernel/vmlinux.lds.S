@@ -99,6 +99,7 @@ SECTIONS
 		*(.discard)
 		*(.discard.*)
 		*(.interp .dynamic)
+		*(.dynsym .dynstr .hash .gnu.hash)
 		*(.eh_frame)
 	}
 
