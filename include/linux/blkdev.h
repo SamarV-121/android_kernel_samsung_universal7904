@@ -53,6 +53,14 @@ struct pr_ops;
 struct request;
 typedef void (rq_end_io_fn)(struct request *, int);
 
+static inline int blk_validate_block_size(unsigned int bsize)
+{
+	if (bsize < 512 || bsize > PAGE_SIZE || !is_power_of_2(bsize))
+		return -EINVAL;
+
+	return 0;
+}
+
 #define BLK_RL_SYNCFULL		(1U << 0)
 #define BLK_RL_ASYNCFULL	(1U << 1)
 
@@ -1144,7 +1152,6 @@ static inline struct request *blk_map_queue_find_tag(struct blk_queue_tag *bqt,
 }
 
 #define BLKDEV_DISCARD_SECURE  0x01    /* secure discard */
-#define BLKDEV_DISCARD_SYNC	0x02	/* handle discard command as sync req */
 
 extern int blkdev_issue_flush(struct block_device *, gfp_t, sector_t *);
 extern int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,

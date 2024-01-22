@@ -877,7 +877,7 @@ void smp_send_stop(void)
 		smp_cross_call(&mask, IPI_CPU_STOP);
 	}
 
-	/* Wait up to one seconds for other CPUs to stop */
+	/* Wait up to one second for other CPUs to stop */
 	timeout = USEC_PER_SEC;
 	while (num_other_online_cpus() && timeout--)
 		udelay(1);

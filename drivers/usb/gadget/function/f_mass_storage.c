@@ -1332,7 +1332,7 @@ static void invalidate_sub(struct fsg_lun *curlun)
 {
 	struct file	*filp = curlun->filp;
 	struct inode	*inode = file_inode(filp);
-	unsigned long	rc;
+	unsigned long __maybe_unused	rc;
 
 	rc = invalidate_mapping_pages(inode->i_mapping, 0, -1);
 	VLDBG(curlun, "invalidate_mapping_pages -> %ld\n", rc);
@@ -4041,7 +4041,7 @@ static int create_mass_storage_device(struct usb_function_instance *fi)
 	struct device_attribute **attrs;
 	struct device_attribute *attr;
 	int err = 0;
-	
+
 	dev = create_function_device("f_mass_storage");
 
 	if (IS_ERR(dev))

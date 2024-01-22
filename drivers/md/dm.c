@@ -364,7 +364,6 @@ out_free_io_cache:
 
 static void local_exit(void)
 {
-	flush_scheduled_work();
 	destroy_workqueue(deferred_remove_workqueue);
 
 	kmem_cache_destroy(_rq_cache);
@@ -2426,7 +2425,9 @@ static struct mapped_device *alloc_dev(int minor)
 	md->flush_bio.bi_bdev = md->bdev;
 	md->flush_bio.bi_rw = WRITE_FLUSH;
 
-	dm_stats_init(&md->stats);
+	r = dm_stats_init(&md->stats);
+	if (r < 0)
+		goto bad;
 
 	/* Populate the mapping, nobody knows we exist yet */
 	spin_lock(&_minor_lock);
@@ -3021,6 +3022,8 @@ static int dm_wait_for_completion(struct mapped_device *md, int interruptible)
 	set_current_state(TASK_RUNNING);
 
 	remove_wait_queue(&md->wait, &wait);
+
+	smp_rmb(); /* paired with atomic_dec_return in end_io_acct */
 
 	return r;
 }

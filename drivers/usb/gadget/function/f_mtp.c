@@ -579,17 +579,8 @@ static ssize_t mtp_read(struct file *fp, char __user *buf,
 		r = ret;
 		goto done;
 	}
-
-	len = ALIGN(count, dev->ep_out->maxpacket);
-
 	spin_lock_irq(&dev->lock);
-
 	if (dev->ep_out->desc) {
-		if (!cdev) {
-			spin_unlock_irq(&dev->lock);
-			return -ENODEV;
-		}
-
 		len = usb_ep_align_maybe(cdev->gadget, dev->ep_out, count);
 		if (len > MTP_BULK_BUFFER_SIZE) {
 			spin_unlock_irq(&dev->lock);
@@ -662,6 +653,11 @@ static ssize_t mtp_write(struct file *fp, const char __user *buf,
 	unsigned xfer;
 	int sendZLP = 0;
 	int ret;
+
+	if (!cdev) {
+		pr_err("%s: check cdev is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	DBG(cdev, "mtp_write(%zu)\n", count);
 
@@ -764,7 +760,6 @@ static void send_file_work(struct work_struct *data)
 	filp = dev->xfer_file;
 	offset = dev->xfer_file_offset;
 	count = dev->xfer_file_length;
-
 	if (count < 0) {
 		dev->xfer_result = -EINVAL;
 		return;
@@ -875,7 +870,6 @@ static void receive_file_work(struct work_struct *data)
 	filp = dev->xfer_file;
 	offset = dev->xfer_file_offset;
 	count = dev->xfer_file_length;
-
 	if (count < 0) {
 		dev->xfer_result = -EINVAL;
 		return;
@@ -1110,21 +1104,12 @@ static int mtp_release(struct inode *ip, struct file *fp)
 	return 0;
 }
 
-#ifdef CONFIG_COMPAT
-static long mtp_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	return mtp_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
-}
-#endif
 /* file operations for /dev/mtp_usb */
 static const struct file_operations mtp_fops = {
 	.owner = THIS_MODULE,
 	.read = mtp_read,
 	.write = mtp_write,
 	.unlocked_ioctl = mtp_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = mtp_compat_ioctl,
-#endif
 	.open = mtp_open,
 	.release = mtp_release,
 };
@@ -1500,7 +1485,6 @@ static void mtp_free_inst(struct usb_function_instance *fi)
 	fi_mtp = to_fi_mtp(fi);
 	kfree(fi_mtp->name);
 	mtp_cleanup();
-	kfree(fi_mtp->mtp_os_desc.group.default_groups);
 	kfree(fi_mtp);
 }
 
@@ -1521,8 +1505,6 @@ struct usb_function_instance *alloc_inst_mtp_ptp(bool mtp_config)
 	INIT_LIST_HEAD(&fi_mtp->mtp_os_desc.ext_prop);
 	descs[0] = &fi_mtp->mtp_os_desc;
 	names[0] = "MTP";
-	usb_os_desc_prepare_interf_dir(&fi_mtp->func_inst.group, 1,
-					descs, names, THIS_MODULE);
 
 	if (mtp_config) {
 		ret = mtp_setup_configfs(fi_mtp);
@@ -1536,6 +1518,8 @@ struct usb_function_instance *alloc_inst_mtp_ptp(bool mtp_config)
 
 	config_group_init_type_name(&fi_mtp->func_inst.group,
 					"", &mtp_func_type);
+	usb_os_desc_prepare_interf_dir(&fi_mtp->func_inst.group, 1,
+					descs, names, THIS_MODULE);
 
 	return  &fi_mtp->func_inst;
 }

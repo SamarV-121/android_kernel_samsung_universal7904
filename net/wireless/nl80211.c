@@ -858,6 +858,15 @@ nl80211_parse_connkeys(struct cfg80211_registered_device *rdev,
 	struct nlattr *key;
 	struct cfg80211_cached_keys *result;
 	int rem, err, def = 0;
+	bool have_key = false;
+
+	nla_for_each_nested(key, keys, rem) {
+		have_key = true;
+		break;
+	}
+
+	if (!have_key)
+		return NULL;
 
 	result = kzalloc(sizeof(*result), GFP_KERNEL);
 	if (!result)
@@ -901,6 +910,11 @@ nl80211_parse_connkeys(struct cfg80211_registered_device *rdev,
 			if (no_ht)
 				*no_ht = true;
 		}
+	}
+
+	if (result->def < 0) {
+		err = -EINVAL;
+		goto error;
 	}
 
 	return result;
@@ -5400,7 +5414,7 @@ static int nl80211_update_mesh_config(struct sk_buff *skb,
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
-	struct mesh_config cfg;
+	struct mesh_config cfg = {};
 	u32 mask;
 	int err;
 
@@ -12840,7 +12854,8 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 	wdev->chandef = *chandef;
 	wdev->preset_chandef = *chandef;
 
-	if (wdev->iftype == NL80211_IFTYPE_STATION &&
+	if ((wdev->iftype == NL80211_IFTYPE_STATION ||
+	     wdev->iftype == NL80211_IFTYPE_P2P_CLIENT) &&
 	    !WARN_ON(!wdev->current_bss))
 		wdev->current_bss->pub.channel = chandef->chan;
 
