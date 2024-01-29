@@ -91,8 +91,6 @@ fw-external-$(CONFIG_SENSORS_SSP_STM32) += ssp_crashed.fw
 
 fw-external-$(CONFIG_KEYBOARD_ABOV_TOUCH_3X6) += abov/a96t326_a5y18.fw abov/a96t326_a5y18_can.fw abov/a96t326_a7y18.fw
 
-fw-external-$(CONFIG_FIVE_TEE_DRIVER) += five/ffffffff000000000000000000000072.tlbin
-
 fw-external-all := $(fw-external-y) $(fw-external-m) $(fw-external-)
 
 quiet_cmd_ihex  = IHEX    $@
