@@ -1398,9 +1398,13 @@ static int dwc3_probe(struct platform_device *pdev)
 	}
 
 	pm_runtime_allow(dev);
+
+	dma_set_max_seg_size(dev, UINT_MAX);
+
 	INIT_WORK(&dwc->set_vbus_current_work, dwc3_exynos_set_vbus_current_work);
 
 	pr_info("%s: ---\n", __func__);
+
 	return 0;
 
 err5:

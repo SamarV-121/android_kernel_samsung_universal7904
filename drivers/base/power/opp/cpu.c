@@ -198,8 +198,12 @@ int dev_pm_opp_of_cpumask_add_table(cpumask_var_t cpumask)
 
 		ret = dev_pm_opp_of_add_table(cpu_dev);
 		if (ret) {
-			pr_err("%s: couldn't find opp table for cpu:%d, %d\n",
-			       __func__, cpu, ret);
+			/*
+			 * OPP may get registered dynamically, don't print error
+			 * message here.
+			 */
+			pr_debug("%s: couldn't find opp table for cpu:%d, %d\n",
+				 __func__, cpu, ret);
 
 			/* Free all other OPPs */
 			dev_pm_opp_of_cpumask_remove_table(cpumask);
@@ -214,7 +218,6 @@ EXPORT_SYMBOL_GPL(dev_pm_opp_of_cpumask_add_table);
 /*
  * Works only for OPP v2 bindings.
  *
- * cpumask should be already set to mask of cpu_dev->id.
  * Returns -ENOENT if operating-points-v2 bindings aren't supported.
  */
 int dev_pm_opp_of_get_sharing_cpus(struct device *cpu_dev, cpumask_var_t cpumask)
@@ -224,11 +227,13 @@ int dev_pm_opp_of_get_sharing_cpus(struct device *cpu_dev, cpumask_var_t cpumask
 	int cpu, ret = 0;
 
 	/* Get OPP descriptor node */
-	np = _of_get_opp_desc_node(cpu_dev);
+	np = dev_pm_opp_of_get_opp_desc_node(cpu_dev);
 	if (!np) {
 		dev_dbg(cpu_dev, "%s: Couldn't find cpu_dev node.\n", __func__);
 		return -ENOENT;
 	}
+
+	cpumask_set_cpu(cpu_dev->id, cpumask);
 
 	/* OPPs are shared ? */
 	if (!of_property_read_bool(np, "opp-shared"))
@@ -247,7 +252,7 @@ int dev_pm_opp_of_get_sharing_cpus(struct device *cpu_dev, cpumask_var_t cpumask
 		}
 
 		/* Get OPP descriptor node */
-		tmp_np = _of_get_opp_desc_node(tcpu_dev);
+		tmp_np = dev_pm_opp_of_get_opp_desc_node(tcpu_dev);
 		if (!tmp_np) {
 			dev_err(tcpu_dev, "%s: Couldn't find tcpu_dev node.\n",
 				__func__);

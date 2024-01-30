@@ -52,7 +52,6 @@ module_param(rndis_ul_max_xfer_size_rcvd, int, S_IRUGO);
 MODULE_PARM_DESC(rndis_ul_max_xfer_size_rcvd,
 		"Max size of bus transfer received");
 
-
 /* The driver for your USB chip needs to support ep0 OUT to work with
  * RNDIS, plus all three CDC Ethernet endpoints (interrupt not optional).
  *
@@ -90,8 +89,7 @@ static const struct file_operations rndis_proc_fops;
 #endif /* CONFIG_USB_GADGET_DEBUG_FILES */
 
 /* supported OIDs */
-static const u32 oid_supported_list[] =
-{
+static const u32 oid_supported_list[] = {
 	/* the general stuff */
 	RNDIS_OID_GEN_SUPPORTED_LIST,
 	RNDIS_OID_GEN_HARDWARE_STATUS,
@@ -484,8 +482,7 @@ static int gen_ndis_query_resp(struct rndis_params *params, u32 OID, u8 *buf,
 		break;
 
 	default:
-		pr_warning("%s: query unknown OID 0x%08X\n",
-			 __func__, OID);
+		pr_warn("%s: query unknown OID 0x%08X\n", __func__, OID);
 	}
 	if (retval < 0)
 		length = 0;
@@ -556,8 +553,8 @@ static int gen_ndis_set_resp(struct rndis_params *params, u32 OID,
 		break;
 
 	default:
-		pr_warning("%s: set unknown OID 0x%08X, size %d\n",
-			 __func__, OID, buf_len);
+		pr_warn("%s: set unknown OID 0x%08X, size %d\n",
+			__func__, OID, buf_len);
 	}
 
 	return retval;
@@ -868,10 +865,12 @@ int rndis_msg_parser(struct rndis_params *params, u8 *buf)
 		 * In one case those messages seemed to relate to the host
 		 * suspending itself.
 		 */
-		pr_warning("%s: unknown RNDIS message 0x%08X len %d\n",
+		pr_warn("%s: unknown RNDIS message 0x%08X len %d\n",
 			__func__, MsgType, MsgLength);
+/*
 		print_hex_dump_bytes(__func__, DUMP_PREFIX_OFFSET,
 				     buf, MsgLength);
+*/
 		break;
 	}
 
@@ -934,7 +933,8 @@ struct rndis_params *rndis_register(void (*resp_avail)(void *v), void *v)
 	params->media_state = RNDIS_MEDIA_STATE_DISCONNECTED;
 	params->resp_avail = resp_avail;
 	params->v = v;
-	INIT_LIST_HEAD(&(params->resp_queue));
+	INIT_LIST_HEAD(&params->resp_queue);
+	spin_lock_init(&params->resp_lock);
 	pr_debug("%s: configNr = %d\n", __func__, i);
 
 	return params;
@@ -979,6 +979,7 @@ int rndis_set_param_dev(struct rndis_params *params, struct net_device *dev,
 
 	rndis_ul_max_xfer_size_rcvd = 0;
 	rndis_ul_max_pkt_per_xfer_rcvd = 0;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rndis_set_param_dev);
@@ -1035,37 +1036,36 @@ EXPORT_SYMBOL_GPL(rndis_add_hdr);
 
 void rndis_free_response(struct rndis_params *params, u8 *buf)
 {
-	rndis_resp_t *r;
-	struct list_head *act, *tmp;
+	rndis_resp_t *r, *n;
 
-	list_for_each_safe(act, tmp, &(params->resp_queue))
-	{
-		r = list_entry(act, rndis_resp_t, list);
-		if (r && r->buf == buf) {
+	spin_lock(&params->resp_lock);
+	list_for_each_entry_safe(r, n, &params->resp_queue, list) {
+		if (r->buf == buf) {
 			list_del(&r->list);
 			kfree(r);
 		}
 	}
+	spin_unlock(&params->resp_lock);
 }
 EXPORT_SYMBOL_GPL(rndis_free_response);
 
 u8 *rndis_get_next_response(struct rndis_params *params, u32 *length)
 {
-	rndis_resp_t *r;
-	struct list_head *act, *tmp;
+	rndis_resp_t *r, *n;
 
 	if (!length) return NULL;
 
-	list_for_each_safe(act, tmp, &(params->resp_queue))
-	{
-		r = list_entry(act, rndis_resp_t, list);
+	spin_lock(&params->resp_lock);
+	list_for_each_entry_safe(r, n, &params->resp_queue, list) {
 		if (!r->send) {
 			r->send = 1;
 			*length = r->length;
+			spin_unlock(&params->resp_lock);
 			return r->buf;
 		}
 	}
 
+	spin_unlock(&params->resp_lock);
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(rndis_get_next_response);
@@ -1082,7 +1082,9 @@ static rndis_resp_t *rndis_add_response(struct rndis_params *params, u32 length)
 	r->length = length;
 	r->send = 0;
 
-	list_add_tail(&r->list, &(params->resp_queue));
+	spin_lock(&params->resp_lock);
+	list_add_tail(&r->list, &params->resp_queue);
+	spin_unlock(&params->resp_lock);
 	return r;
 }
 
@@ -1136,7 +1138,8 @@ int rndis_rm_hdr(struct gether *port,
 
 		skb_pull(skb, data_offset + 8);
 
-		if (msg_len == skb->len) {
+		if (data_len == skb->len ||
+				data_len == (skb->len - 1)) {
 			skb_trim(skb, data_len);
 			break;
 		}

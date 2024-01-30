@@ -70,9 +70,6 @@ int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 		type |= REQ_SECURE;
 	}
 
-	if (flags & BLKDEV_DISCARD_SYNC)
-		type |= REQ_SYNC;
-
 	while (nr_sects) {
 		unsigned int req_sects;
 		sector_t end_sect, tmp;

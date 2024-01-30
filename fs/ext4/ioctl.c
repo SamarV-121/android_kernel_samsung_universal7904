@@ -136,7 +136,7 @@ static long swap_inode_boot_loader(struct super_block *sb,
 	/* Protect extent tree against block allocations via delalloc */
 	ext4_double_down_write_data_sem(inode, inode_bl);
 
-	if (inode_bl->i_nlink == 0) {
+	if (is_bad_inode(inode_bl) || !S_ISREG(inode_bl->i_mode)) {
 		/* this inode has never been used as a BOOT_LOADER */
 		set_nlink(inode_bl, 1);
 		i_uid_write(inode_bl, 0);
@@ -145,6 +145,7 @@ static long swap_inode_boot_loader(struct super_block *sb,
 		ei_bl->i_flags = 0;
 		inode_bl->i_version = 1;
 		i_size_write(inode_bl, 0);
+		EXT4_I(inode_bl)->i_disksize = inode_bl->i_size;
 		inode_bl->i_mode = S_IFREG;
 		if (ext4_has_feature_extents(sb)) {
 			ext4_set_inode_flag(inode_bl, EXT4_INODE_EXTENTS);
@@ -734,21 +735,16 @@ resizefs_out:
 		return err;
 	}
 
-	case FIDTRIM:
 	case FITRIM:
 	{
 		struct request_queue *q = bdev_get_queue(sb->s_bdev);
 		struct fstrim_range range;
 		int ret = 0;
-		int flags  = cmd == FIDTRIM ? BLKDEV_DISCARD_SECURE : 0;
 
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 
 		if (!blk_queue_discard(q))
-			return -EOPNOTSUPP;
-
-		if ((flags & BLKDEV_DISCARD_SECURE) && !blk_queue_secdiscard(q))
 			return -EOPNOTSUPP;
 
 		/*
@@ -762,7 +758,7 @@ resizefs_out:
 		    sizeof(range)))
 			return -EFAULT;
 
-		ret = ext4_trim_fs(sb, &range, flags);
+		ret = ext4_trim_fs(sb, &range);
 		if (ret < 0)
 			return ret;
 

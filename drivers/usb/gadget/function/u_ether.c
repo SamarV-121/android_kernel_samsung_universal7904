@@ -104,6 +104,7 @@ struct eth_dev {
 #define	WORK_RX_MEMORY		0
 
 	bool			zlp;
+	bool			no_skb_reserve;
 	u8			host_mac[ETH_ALEN];
 	u8			dev_mac[ETH_ALEN];
 	int 			no_of_zlp;
@@ -137,12 +138,12 @@ static inline int qlen(struct usb_gadget *gadget, unsigned qmult)
 #undef INFO
 
 #define xprintk(d, level, fmt, args...) \
-	printk(level "%s: " fmt , (d)->net->name , ## args)
+	printk(level "%s: " fmt, (d)->net->name, ## args)
 
 #ifdef DEBUG
 #undef DEBUG
 #define DBG(dev, fmt, args...) \
-	xprintk(dev , KERN_DEBUG , fmt , ## args)
+	xprintk(dev, KERN_DEBUG, fmt, ## args)
 #else
 #define DBG(dev, fmt, args...) \
 	do { } while (0)
@@ -156,9 +157,9 @@ static inline int qlen(struct usb_gadget *gadget, unsigned qmult)
 #endif /* DEBUG */
 
 #define ERROR(dev, fmt, args...) \
-	xprintk(dev , KERN_ERR , fmt , ## args)
+	xprintk(dev, KERN_ERR, fmt, ## args)
 #define INFO(dev, fmt, args...) \
-	xprintk(dev , KERN_INFO , fmt , ## args)
+	xprintk(dev, KERN_INFO, fmt, ## args)
 
 /*-------------------------------------------------------------------------*/
 
@@ -272,7 +273,8 @@ rx_submit(struct eth_dev *dev, struct usb_request *req, gfp_t gfp_flags)
 	 * but on at least one, checksumming fails otherwise.  Note:
 	 * RNDIS headers involve variable numbers of LE32 values.
 	 */
-	skb_reserve(skb, NET_IP_ALIGN);
+	if (likely(!dev->no_skb_reserve))
+		skb_reserve(skb, NET_IP_ALIGN);
 
 	req->buf = skb->data;
 	req->length = size;
@@ -383,7 +385,7 @@ static int prealloc(struct list_head *list, struct usb_ep *ep, unsigned n, int t
 		req = usb_ep_alloc_request(ep, GFP_KERNEL);
 		if (!req)
 			return list_empty(list) ? -ENOMEM : i;
-		if (tx_size){
+		if (tx_size) {
 			if (!req->buf)
 				req->buf = kmalloc(tx_size, GFP_KERNEL);
 			if (!req->buf) {
@@ -423,20 +425,19 @@ static int alloc_requests(struct eth_dev *dev, struct gether *link, unsigned n)
 				/* size of rndis_packet_msg_type */
 				+ 44
 				+ 22));
-	}
-	else
+	} else
 		dev->tx_req_bufsize = 0;
 
 	status = prealloc(&dev->tx_reqs, link->in_ep, n, dev->tx_req_bufsize);
 	if (status < 0)
 		goto fail;
 	else if (status > 0)
-		printk("usb: %s prepare  [%d] dev->tx_reqs  \n",__func__, status);
+		printk("usb: %s prepare  [%d] dev->tx_reqs  \n", __func__, status);
 	status = prealloc(&dev->rx_reqs, link->out_ep, n, 0);
 	if (status < 0)
 		goto fail;
 	else if (status > 0)
-		printk("usb: %s prepare [%d] dev->rx_reqs \n",__func__, status);
+		printk("usb: %s prepare [%d] dev->rx_reqs \n", __func__, status);
 	goto done;
 fail:
 	DBG(dev, "can't alloc requests\n");
@@ -454,7 +455,7 @@ static void rx_fill(struct eth_dev *dev, gfp_t gfp_flags)
 	spin_lock_irqsave(&dev->req_lock, flags);
 	while (!list_empty(&dev->rx_reqs)) {
 		/* break the nexus of continuous completion and re-submission*/
-		if(!dev->port_usb || (++req_cnt > qlen(dev->gadget, dev->qmult)))
+		if (!dev->port_usb || (++req_cnt > qlen(dev->gadget, dev->qmult)))
 			break;
 
 		req = container_of(dev->rx_reqs.next,
@@ -495,13 +496,13 @@ static void process_rx_w(struct work_struct *work)
 		/*
 		  Need to revisit net->mtu	does not include header size incase of changed MTU
 		*/
-			if(is_ncm) {
+			if (is_ncm) {
 				if (status < 0
 					|| ETH_HLEN > skb->len
 					|| skb->len > (dev->net->mtu + ETH_HLEN)) {
-					printk(KERN_ERR "usb: %s  drop incase of NCM rx length %d\n",__func__,skb->len);
+					printk(KERN_ERR "usb: %s  drop incase of NCM rx length %d\n", __func__, skb->len);
 				} else {
-					printk(KERN_ERR "usb: %s  Dont drop incase of NCM rx length %d\n",__func__,skb->len);
+					printk(KERN_ERR "usb: %s  Dont drop incase of NCM rx length %d\n", __func__, skb->len);
 					goto process_frame;
 				}
 			}
@@ -511,7 +512,7 @@ static void process_rx_w(struct work_struct *work)
 #ifndef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 			DBG(dev, "rx length %d\n", skb->len);
 #else
-			pr_debug("usb: %s Drop rx length %d\n",__func__,skb->len);
+			pr_debug("usb: %s Drop rx length %d\n", __func__, skb->len);
 #endif
 
 			DBG(dev, "rx length %d\n", skb->len);
@@ -564,7 +565,7 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 		dev->net->stats.tx_errors++;
 		VDBG(dev, "tx err %d\n", req->status);
 #ifdef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
-		printk(KERN_ERR"usb:%s tx err %d\n",__func__, req->status);
+		printk(KERN_ERR"usb:%s tx err %d\n", __func__, req->status);
 #endif
 		/* FALLTHROUGH */
 	case -ECONNRESET:		/* unlink */
@@ -579,13 +580,19 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 	dev->net->stats.tx_packets++;
 
 	spin_lock(&dev->req_lock);
+	req->length = 0;
 	list_add_tail(&req->list, &dev->tx_reqs);
+
+	/* list and and just return worh usb reset or shutdown */
+	if (req->status == -ESHUTDOWN) {
+		spin_unlock(&dev->req_lock);
+		return;
+	}
 
 	if (dev->port_usb->multi_pkt_xfer) {
 #ifndef CONFIG_USB_RNDIS_MULTIPACKET_WITH_TIMER
 		dev->no_tx_req_used--;
 #endif
-		req->length = 0;
 		in = dev->port_usb->in_ep;
 
 #ifdef CONFIG_USB_RNDIS_MULTIPACKET_WITH_TIMER
@@ -600,14 +607,14 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 				length = new_req->length;
 
 				new_req->zero = 0;
-				if((length % in->maxpacket) == 0) {
+				if ((length % in->maxpacket) == 0) {
 					new_req->zero = 1;
 					dev->no_of_zlp++;
 				}
 
 				/* NCM requires no zlp if transfer is dwNtbInMaxSize */
-				if (dev->port_usb->is_fixed) { 
-					if(length == dev->port_usb->fixed_in_len) {
+				if (dev->port_usb->is_fixed) {
+					if (length == dev->port_usb->fixed_in_len) {
 						new_req->zero = 0;
 						dev->no_of_zlp--;
 					}
@@ -630,7 +637,7 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 				retval = usb_ep_queue(in, new_req, GFP_ATOMIC);
 				switch (retval) {
 				default:
-					printk(KERN_ERR"usb: dropped tx_complete_newreq(%pK)\n",new_req);
+					printk(KERN_ERR"usb: dropped tx_complete_newreq(%pK)\n", new_req);
 					DBG(dev, "tx queue err %d\n", retval);
 #ifdef CONFIG_USB_RNDIS_MULTIPACKET
 					new_req->length = 0;
@@ -705,15 +712,15 @@ static int tx_task(struct eth_dev *dev, struct usb_request *req)
 
 	req->zero = 0;
 
-	if((length % in->maxpacket) == 0) {
+	if ((length % in->maxpacket) == 0) {
 		req->zero = 1;
 		dev->no_of_zlp++;
 	}
 
 	/* NCM requires no zlp if transfer is dwNtbInMaxSize */
 	if (dev->port_usb) {
-		if (dev->port_usb->is_fixed) { 
-			if(length == dev->port_usb->fixed_in_len) {
+		if (dev->port_usb->is_fixed) {
+			if (length == dev->port_usb->fixed_in_len) {
 				req->zero = 0;
 				dev->no_of_zlp--;
 			}
@@ -809,8 +816,8 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	unsigned long		flags;
 	struct usb_ep		*in;
 	u16			cdc_filter;
-	bool eth_multi_pkt_xfer = 0;
-	bool eth_supports_multi_frame = 0;
+	bool eth_multi_pkt_xfer;
+	bool eth_supports_multi_frame;
 #ifdef CONFIG_USB_RNDIS_MULTIPACKET_WITH_TIMER
 	if (dev->en_timer) {
 		hrtimer_cancel(&dev->tx_timer);
@@ -954,16 +961,16 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 #else
 	req->complete = tx_complete;
 
-	req->zero =0;
-	if((length % in->maxpacket) == 0) {
+	req->zero = 0;
+	if ((length % in->maxpacket) == 0) {
 		req->zero = 1;
-		dev->no_of_zlp++;		
-	}	
+		dev->no_of_zlp++;
+	}
 
 	/* NCM requires no zlp if transfer is dwNtbInMaxSize */
 	if (dev->port_usb) {
-		if (dev->port_usb->is_fixed) { 
-			if(length == dev->port_usb->fixed_in_len) { 
+		if (dev->port_usb->is_fixed) {
+			if (length == dev->port_usb->fixed_in_len) {
 				req->zero = 0;
 				dev->no_of_zlp--;
 			}
@@ -1112,7 +1119,7 @@ static int get_ether_addr(const char *str, u8 *dev_addr)
 				str++;
 			num = hex_to_bin(*str++) << 4;
 			num |= hex_to_bin(*str++);
-			dev_addr [i] = num;
+			dev_addr[i] = num;
 		}
 		if (is_valid_ether_addr(dev_addr))
 			return 0;
@@ -1202,7 +1209,6 @@ struct eth_dev *gether_setup_name(struct usb_gadget *g,
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	memcpy(dev->host_mac, ethaddr, ETH_ALEN);
 	printk(KERN_DEBUG "usb: set unique host mac\n");
-	
 #else
 	if (get_host_ether_addr(host_ethaddr, dev->host_mac))
 		dev_warn(&g->dev, "using random %s ethernet address\n", "host");
@@ -1300,6 +1306,7 @@ int gether_register_netdev(struct net_device *net)
 		return status;
 	} else {
 		DBG(dev, "HOST MAC %pM\n", dev->host_mac);
+		DBG(dev, "MAC %pM\n", dev->dev_mac);
 
 		/* two kinds of host-initiated state changes:
 		 *  - iff DATA transfer is active, carrier is "on"
@@ -1490,6 +1497,7 @@ struct net_device *gether_connect(struct gether *link)
 
 	if (result == 0) {
 		dev->zlp = link->is_zlp_ok;
+		dev->no_skb_reserve = gadget_avoids_skb_reserve(dev->gadget);
 		DBG(dev, "qlen %d\n", qlen(dev->gadget, dev->qmult));
 
 		dev->header_len = link->header_len;
@@ -1534,9 +1542,8 @@ int gether_alloc_request(struct gether *link)
 	struct eth_dev		*dev = link->ioport;
 	int			result = 0;
 
-	/* update multi packet number */	
-	if (!link->is_fixed)
-	{
+	/* update multi packet number */
+	if (!link->is_fixed) {
 		dev->ul_max_pkts_per_xfer = link->ul_max_pkts_per_xfer;
 		dev->dl_max_pkts_per_xfer = link->dl_max_pkts_per_xfer;
 	}
@@ -1552,7 +1559,7 @@ void gether_free_request(struct gether *link)
 {
 	struct eth_dev		*dev = link->ioport;
 	struct usb_request	*req;
-	
+
 	printk("usb: %s\n", __func__);
 	flush_work(&dev->work);
 
@@ -1561,7 +1568,6 @@ void gether_free_request(struct gether *link)
 		req = container_of(dev->tx_reqs.next,
 					struct usb_request, list);
 		list_del(&req->list);
-
 		spin_unlock(&dev->req_lock);
 		if (link->multi_pkt_xfer)
 			kfree(req->buf);
@@ -1578,7 +1584,6 @@ void gether_free_request(struct gether *link)
 		req = container_of(dev->rx_reqs.next,
 					struct usb_request, list);
 		list_del(&req->list);
-
 		spin_unlock(&dev->req_lock);
 		usb_ep_free_request(link->out_ep, req);
 		spin_lock(&dev->req_lock);
@@ -1614,7 +1619,7 @@ void gether_disconnect(struct gether *link)
 
 	netif_stop_queue(dev->net);
 	netif_carrier_off(dev->net);
-	printk(KERN_ERR"usb: %s No of ZLPS (%d)\n",__func__,dev->no_of_zlp);
+	printk(KERN_ERR"usb: %s No of ZLPS (%d)\n", __func__, dev->no_of_zlp);
 
 #ifdef CONFIG_USB_RNDIS_MULTIPACKET_WITH_TIMER
 	if (dev->en_timer) {
@@ -1633,7 +1638,7 @@ void gether_disconnect(struct gether *link)
 	spin_unlock(&dev->lock);
 
 	usb_ep_disable(link->out_ep);
-	
+
 #if 0
 	spin_lock(&dev->req_lock);
 	while (!list_empty(&dev->tx_reqs)) {

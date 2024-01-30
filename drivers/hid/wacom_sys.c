@@ -70,6 +70,9 @@ static int wacom_raw_event(struct hid_device *hdev, struct hid_report *report,
 {
 	struct wacom *wacom = hid_get_drvdata(hdev);
 
+	if (wacom->wacom_wac.features.type == BOOTLOADER)
+		return 0;
+
 	if (size > WACOM_PKGLEN_MAX)
 		return 1;
 
@@ -1658,7 +1661,7 @@ static void wacom_update_name(struct wacom *wacom)
 		    strstr(wacom->hdev->name, "wacom") ||
 		    strstr(wacom->hdev->name, "WACOM")) {
 			/* name is in HID descriptor, use it */
-			strlcpy(name, wacom->hdev->name, sizeof(name));
+			strscpy(name, wacom->hdev->name, sizeof(name));
 
 			/* strip out excess whitespaces */
 			while (1) {
@@ -1677,7 +1680,7 @@ static void wacom_update_name(struct wacom *wacom)
 				 "%s %X", features->name, wacom->hdev->product);
 		}
 	} else {
-		strlcpy(name, features->name, sizeof(name));
+		strscpy(name, features->name, sizeof(name));
 	}
 
 	/* Append the device type to the name */
@@ -1718,6 +1721,11 @@ static int wacom_probe(struct hid_device *hdev,
 	if (error) {
 		hid_err(hdev, "parse failed\n");
 		goto fail_parse;
+	}
+
+	if (features->type == BOOTLOADER) {
+		hid_warn(hdev, "Using device in hidraw-only mode");
+		return hid_hw_start(hdev, HID_CONNECT_HIDRAW);
 	}
 
 	wacom_wac = &wacom->wacom_wac;
