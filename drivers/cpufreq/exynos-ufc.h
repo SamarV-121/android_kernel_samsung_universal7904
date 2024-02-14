@@ -39,3 +39,14 @@ struct exynos_ufc_info {
 };
 
 extern struct cpumask early_cpu_mask;
+
+#ifdef CONFIG_ACPM_DVFS
+extern void __iomem *map_base;
+extern void __iomem *sram_base;
+
+extern int fvmap_change_voltage(unsigned int dvfs_id,
+				unsigned int freq, unsigned int voltage);
+extern void fvmap_copy_from_sram(void __iomem *map_base,
+				 void __iomem *sram_base,
+				 unsigned int requested_voltage_change[3]);
+#endif
