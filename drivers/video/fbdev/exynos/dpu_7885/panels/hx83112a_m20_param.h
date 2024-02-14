@@ -382,7 +382,7 @@ static const unsigned char SEQ_SET_E3_BANK_03_B[] = {
 /* platform brightness <-> bl reg */
 static unsigned int brightness_table[EXTEND_BRIGHTNESS + 1] = {
 	0,
-	8, 17, 27, 37, 47, 56, 66, 76, 86, 95,
+	17, 17, 27, 37, 47, 56, 66, 76, 86, 95,
 	105, 115, 125, 134, 144, 154, 164, 173, 183, 193,
 	203, 213, 222, 232, 242, 252, 261, 271, 281, 291,
 	300, 310, 320, 330, 339, 349, 359, 369, 379, 388,
